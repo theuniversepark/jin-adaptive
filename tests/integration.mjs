@@ -18,7 +18,7 @@ const st = s.processing.find((x) => x.id === 'RC_TURN'); s.injectFault(st); run(
 s.disruptSupply?.(300); run(400);
 
 console.log('== 진화 컨셉');
-{ const el = { innerHTML: '' }; renderConcept(el, { current: 'dark', res: null, lineName: '정밀조립Zone', busy: false });
+{ const el = { innerHTML: '' }; renderConcept(el, { current: 'dark', res: null, lineName: '적응가공Zone', busy: false });
   const h = el.innerHTML;
   check('진화 컨셉에 현장 감시(CCTV) · 통신망(5G) · ERP · 입고·창고 · 이동 로봇 에너지 단계 비교', ['현장 감시 (CCTV)', 'CCTV 에이전트', '통신망', 'Private 5G', 'ERP (업무 기록)', 'Odoo', '입고·창고', '이동 로봇 에너지', '패킷 덤프'].every((k) => h.includes(k))); }
 

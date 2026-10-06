@@ -123,11 +123,12 @@ const archPref = {};   // 단계별 운영자 선택 (없으면 MODES[단계].ag
 let modeKey = 'smart', speed = 3, running = true, labelsOn = true;
 const SEED = 20261001;
 
-// 공정 라인 구성 — 정밀조립Zone 두 시나리오(유압블록·리어커버)와 사용자 라인을 각각 저장해 다음 실행 때도 유지
-// v4: 정밀조립Zone이 혼류(분기·합류) 구조로 바뀌어 이전 Zone 레시피는 버리고 사용자 라인만 옮긴다
+// 공정 라인 구성 — 적응가공Zone 혼류 시나리오(유압블록·리어커버)와 사용자 라인을 각각 저장해 다음 실행 때도 유지
+// am.v1: 적응가공Zone (정밀조립 jin-3d에서 갈라져 나옴 — 저장 키를 따로 써서 정밀조립 레시피와 섞이지 않게)
+// v4: 적응가공Zone이 혼류(분기·합류) 구조로 바뀌어 이전 Zone 레시피는 버리고 사용자 라인만 옮긴다
 // v5: 부품분류셀 기본 로봇이 SCARA → AMMR(AMR 기반 양팔 로봇)로 바뀌어 이전 Zone 레시피는 버린다
 // v6: 포장셀 기본 로봇도 AMMR로 바뀌어 이전 Zone 레시피는 버린다
-const LINES_KEY = 'jin3d.lines.v6', OLD_KEYS = ['jin3d.lines.v5', 'jin3d.lines.v4', 'jin3d.lines.v3', 'jin3d.lines.v2'], OLD_LINE_KEY = 'jin3d.line.v1';
+const LINES_KEY = 'jin3d.am.lines.v1', OLD_KEYS = [], OLD_LINE_KEY = 'jin3d.am.line.v0';
 const LINE_SLOTS = ['zone', 'custom'];
 const slotDefault = (k) => (k === 'custom' ? cloneLine(DEFAULT_LINE) : zoneLine());
 function loadLines() {
@@ -220,7 +221,7 @@ function start(key) {
   renderZoneCard();
 }
 
-// ── 정밀조립Zone 카드 (왼쪽 패널 위) ─────────────────
+// ── 적응가공Zone 카드 (왼쪽 패널 위) ─────────────────
 const zoneCard = document.getElementById('zoneCard');
 const escH = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 // 주기적으로 다시 그리는 창: 내용을 바꿔도 안쪽 스크롤 위치·펼친 <details>를 지킨다 (같은 내용이면 다시 그리지 않음)
@@ -242,11 +243,11 @@ function setHTML(el, html) {
 const cellBadge = (id) => `${ZONE_CELLS[id].no}.${ZONE_CELLS[id].label.replace('셀', '')}`;
 function renderZoneCard() {
   const zone = isZone(currentLine);
-  const seg = `<button data-slot="zone" class="${lineSlot === 'zone' ? 'on' : ''}">정밀조립Zone (혼류)</button><button data-slot="custom" class="${lineSlot === 'custom' ? 'on' : ''}">사용자 라인</button>`;
+  const seg = `<button data-slot="zone" class="${lineSlot === 'zone' ? 'on' : ''}">적응가공Zone (혼류)</button><button data-slot="custom" class="${lineSlot === 'custom' ? 'on' : ''}">사용자 라인</button>`;
   let body;
   if (zone) {
     const mixSeg = Object.entries(ZONE_MIXES).map(([k, m]) => `<button data-mix="${k}" class="${k === currentLine.mix ? 'on' : ''}">${escH(m.label)}</button>`).join('');
-    const cellRow = (id) => { const c = ZONE_CELLS[id]; return `<div class="zc-cell p-${c.product}" data-cell="${id}"><b>${c.no}</b><span>${escH(c.label)}</span><em>${escH(c.use)}</em><i class="chip" data-chip="${id}"></i></div>`; };
+    const cellRow = (id) => { const c = ZONE_CELLS[id]; return `<div class="zc-cell p-${c.product}" data-cell="${id}"><b>${c.no}</b><span>${escH(c.label)}</span><em>${escH(c.code)} · ${escH(c.use)}</em><i class="chip" data-chip="${id}"></i></div>`; };
     body = `<div class="zc-sub">혼류 비율 (유압블록 : 리어커버)</div>
       <div class="seg small zc-mix">${mixSeg}</div>
       <div class="zc-cells">${cellRow('MATL')}
@@ -254,9 +255,10 @@ function renderZoneCard() {
         <div class="zc-line p-rcover"><small>▶ 리어커버 라인 · ${escH(ZONE_PRODUCTS.rcover.customer)}</small>${cellRow('RC_MILL')}${cellRow('RC_TURN')}</div></div>
         ${cellRow('CMM')}</div>
       <div class="zc-amr" id="zcAmr"></div>
-      <div class="zc-flow">투입 → 1.분류 → <span class="t-dt">유압블록 2.조립 → 3.체결</span> / <span class="t-ea">리어커버 4.조립 → 5.체결</span> → 6.포장 → 구분 적재</div>`;
+      <div class="zc-flow">투입 → 1.소재 식별·3D측정 → <span class="t-dt">유압블록 2.5축 가공 → 3.사선·디버링</span> / <span class="t-ea">리어커버 4.정밀절삭 → 5.선삭</span> → 6.CMM 판정 (NG → 리워크) → 합격품 적재</div>
+      <div class="zc-ad" id="zcAd"></div>`;
   } else body = `<div class="zc-sub">${escH(currentLine.name)} · 공정 ${currentLine.stations.length}개 (공정 설계에서 편집)</div>`;
-  zoneCard.innerHTML = `<div class="zc-h"><b>${ZONE_NAME}</b><small>메타팩토리 테스트베드 · 6셀 혼류</small></div>
+  zoneCard.innerHTML = `<div class="zc-h"><b>${ZONE_NAME}</b><small>메타팩토리 테스트베드 A-2 · 대승정밀 · 6셀 혼류</small></div>
     <div class="seg small" id="slotSeg">${seg}</div>${body}`;
   updateZoneCard();
 }
@@ -271,10 +273,31 @@ function updateZoneCard() {
   const n = (k) => sim.carriers.filter((c) => c.state === k).length;
   const g = sim.stats.goodBy;
   const amr = document.getElementById('zcAmr');
-  if (amr) amr.innerHTML = `양품 유압블록 <b>${g.hblock ?? 0}</b> · 리어커버 <b>${g.rcover ?? 0}</b> · 구분 적재 <b>${sim.fgBy.hblock}</b> / <b>${sim.fgBy.rcover}</b>`
+  renderAdaptive();
+  if (amr) amr.innerHTML = `양품 유압블록 <b>${g.hblock ?? 0}</b> · 리어커버 <b>${g.rcover ?? 0}</b> · 합격품 적재 <b>${sim.fgBy.hblock}</b> / <b>${sim.fgBy.rcover}</b>`
     + (sim.carriers.length ? `<br>🛻 AMR ${sim.carriers.length}대 · 적재 운반 <b>${n('line')}</b> · 빈차 복귀 <b>${n('return')}</b> · 대기 <b>${n('park') + n('toSrc') + n('docking') + n('atSrc')}</b>` : '<br>셀 간 물류: 고정 컨베이어 (레거시)')
     + `<br>🚚 입고 · 창고 원자재 <b>${sim.whRaw}</b>${sim.partsTracked ? ` · 부품 <b>${sim.whParts}</b>` : ''} · 입고 트럭 <b>${sim.inbound.stats.trucks}</b>대${sim.inbound.docked ? ' · 하차 중' : sim.inbound.trucks.length ? ' · 입차 중' : sim.inbound.orders.length ? ' · 발주됨' : ''}`;
 }
+// 적응가공 폐루프 (A-2-5 통합 OCS): 진단·보정 지연, 채터 자율복구, 공구 수명, CMM 판정·리워크, 오프셋 환류
+function renderAdaptive() {
+  const el = document.getElementById('zcAd'); if (!el || !sim.adaptive) return;
+  const A = sim.adaptive.status(), S = A.stats, M = A.mode, pc = (v) => (v == null ? '-' : `${(v * 100).toFixed(1)}%`);
+  const ms = (v, kpi) => (v == null ? '<span class="dim">없음</span>' : `<b class="${v <= kpi ? 'ok' : 'bad'}">${v.toFixed(1)}ms</b>`);
+  const bar = (c) => { const L = c.tool.life, cls = L < 20 ? 'bad' : L < 40 ? 'warn' : 'ok'; return `<div class="ad-tool"><span>${escH(c.name.replace(/셀$/, ''))}</span><i class="${cls}" style="--w:${L.toFixed(0)}%"></i><em>${L.toFixed(0)}% · 편차 ${c.err > 0 ? '+' : ''}${c.err.toFixed(1)}µm${c.ov < 1 ? ` · <b class="warn">F/S ${Math.round(c.ov * 100)}%</b>` : ''}</em></div>`; };
+  const ev = sim.adaptive.events.slice(-6).reverse().map((e) => `<li class="k-${e.kind}"><time>${fmtClock(e.t)}</time>${escH(e.cell ?? '')} · ${escH(e.text)}</li>`).join('');
+  const meas = sim.adaptive.measures.slice(-24);
+  const dots = meas.map((m) => { const y = Math.max(2, Math.min(38, 20 - (m.dev / 40) * 18)); return `<circle cx="${4 + meas.indexOf(m) * 8}" cy="${y.toFixed(1)}" r="2.6" class="${m.res}${m.product === 'rcover' ? ' rc' : ''}"><title>#${m.item} ${m.dev}µm ${m.res}</title></circle>`; }).join('');
+  setHTML(el, `<div class="ad-h">🔁 적응가공 폐루프 <small>A-2-5 통합 OCS · ${escH(M.label)}</small></div>
+    <div class="ad-kpi"><span>진단 ${ms(A.diagAvg, M.diagMs ?? 0)} <small>목표 &lt;${M.diagMs ?? '-'}</small></span><span>보정 ${ms(A.ctrlAvg, M.ctrlMs ?? 0)} <small>목표 &lt;${M.ctrlMs ?? '-'}</small></span>
+      <span>채터 ${S.chatter}건 · 자율복구 <b>${pc(A.autoRate)}</b>${S.chatterMissed ? ` · <b class="bad">미감지 ${S.chatterMissed}</b>` : ''}</span>
+      <span>CMM ${S.measured}건 · 1회 합격 <b>${pc(A.yield1)}</b> · 리워크 <b class="warn">${S.rework}</b> · 폐기 <b class="bad">${S.scrap}</b></span>
+      <span>공구교체 ${S.toolChanges} · 파손 <b class="${S.toolBreaks ? 'bad' : 'ok'}">${S.toolBreaks}</b> · 오프셋 환류 ${S.comp}회</span>
+      <span>적응 공구경로 가공시간 단축 <b>${S.savedS ? `${(S.savedS / 60).toFixed(1)}분` : '-'}</b> (소재 스캔 ${S.scanned})</span></div>
+    ${A.cells.map(bar).join('')}
+    <div class="ad-chart"><small>CMM 치수 편차 (최근 24건 · 공차 ±20µm)</small><svg viewBox="0 0 196 40" preserveAspectRatio="none"><rect x="0" y="11" width="196" height="18" class="tol"/><line x1="0" x2="196" y1="20" y2="20" class="mid"/>${dots}</svg></div>
+    <details class="ad-ev"><summary>폐루프 이벤트</summary><ul>${ev || '<li>아직 없음</li>'}</ul></details>`);
+}
+const fmtClock = (t) => { const s = Math.floor(t); return `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
 zoneCard.addEventListener('click', (e) => {
   const b = e.target.closest('button[data-slot]');
   if (b && b.dataset.slot !== lineSlot) {
@@ -295,7 +318,7 @@ zoneCard.addEventListener('click', (e) => {
     const w = ZONE_MIXES[currentLine.mix];
     sim.log('act', `혼류 비율 변경 · 유압블록 : 리어커버 = ${w.label}`, {
       obs: `투입 순서를 비율에 맞춰 평준화 (유압블록 ${w.w.hblock} : 리어커버 ${w.w.rcover})`,
-      dec: '1.부품분류셀이 부품 종류를 판별해 제품별 라인으로 분기, 6.포장셀에서 합류',
+      dec: '1.소재 식별·3D측정셀이 소재를 판별해 제품별 가공 라인으로 분기, 6.초정밀 측정·리워크셀에서 합류',
       act: '시뮬레이션 재시작',
     });
     return;
@@ -337,10 +360,10 @@ function updateCmdUI() {
   btnEstop.textContent = K.estopAll ? '🔄 비상정지 리셋' : '🛑 비상정지';
   btnEstop.classList.toggle('armed', K.estopAll);
   const sts = sim.processing.filter((st) => st.cmd?.estop);
-  const msg = K.estopAll ? ['🛑 비상정지 발령 — 정밀조립Zone 전체 정지 (로봇·AMR·이동로봇 정지) · 리셋 명령으로 재가동', 'bad']
+  const msg = K.estopAll ? ['🛑 비상정지 발령 — 적응가공Zone 전체 정지 (로봇·AMR·이동로봇 정지) · 리셋 명령으로 재가동', 'bad']
     : sts.length ? [`🛑 셀 비상정지 — ${sts.map((st) => st.name).join(', ')} · 리셋 필요`, 'bad']
     : sim.processing.some((st) => st.cmd?.check > 0) ? ['🔄 비상정지 해제 — 셀 자가진단 중', 'info']
-    : K.pstopAll ? ['✋ 보호정지 — 정밀조립Zone 전체 감속 정지 · 재개 명령 대기', 'warn']
+    : K.pstopAll ? ['✋ 보호정지 — 적응가공Zone 전체 감속 정지 · 재개 명령 대기', 'warn']
     : K.evac ? ['🏃 이동로봇 대피 중 — 운전 재개 명령으로 복귀', 'warn']
     : pend ? [`📡 ${K.label(pend)} 명령 전송 중…`, 'info'] : null;
   cmdBanner.hidden = !msg;
@@ -973,7 +996,7 @@ function renderCctvPanel(force) {
 const sidePanels = { left: document.getElementById('tglLeft'), right: document.getElementById('tglRight') };
 function setSide(side, hide) {
   document.body.classList.toggle(`hide-${side}`, hide);
-  const b = sidePanels[side], name = side === 'left' ? '왼쪽 패널(정밀조립Zone)' : '오른쪽 패널(자율운영 에이전트)', key = side === 'left' ? '[' : ']';
+  const b = sidePanels[side], name = side === 'left' ? '왼쪽 패널(적응가공Zone)' : '오른쪽 패널(자율운영 에이전트)', key = side === 'left' ? '[' : ']';
   b.textContent = (side === 'left') === hide ? '▶' : '◀';
   b.title = `${name} ${hide ? '보이기' : '숨기기'} · 단축키 ${key}`;
   try { localStorage.setItem(`jin3d.hide.${side}`, hide ? '1' : '0'); } catch { /* 저장소 없음 */ }
@@ -1402,7 +1425,7 @@ function viewAgent() {
 function viewCells() {
   const s = sim, T = Math.max(1, s.time), cells = s.processing.filter((st) => !st.standby);
   const mixW = ZONE_MIXES[s.line.mix]?.w, mixSum = mixW ? Object.values(mixW).reduce((a, b) => a + b, 0) : 0;
-  const gates = cells.filter((st) => st.def.type === 'sort' || st.def.type === 'pack');
+  const gates = cells.filter((st) => ['sort', 'pack', 'matid', 'cmm'].includes(st.def.type));
   const PCOL = { hblock: '#f0a030', rcover: '#9a6bff' };
   const gateCard = (st) => {
     const c = st.gateCount ?? {}, n = Object.values(c).reduce((a, b) => a + b, 0);

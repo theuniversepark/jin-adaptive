@@ -64,7 +64,7 @@ function buildAssets(sim, view) {
         f('Defects', '불량 누적', 'int', 'pcs', () => st.c.defects),
         f('Failures', '고장 누적', 'int', 'count', () => st.c.fails),
         f('QueueLength', '대기열', 'int', 'pcs', () => sim.queueLen(st)),
-        ...(d.type === 'sort' || d.type === 'pack' ? [f('GateDecision', '게이트 판별 결정', 'string', null, () => (st.item && st.gate?.id === st.item.id ? st.gate.text : '')), f('GateProduct', '게이트 판별 제품', 'string', null, () => (st.item && st.gate?.id === st.item.id ? st.gate.product ?? '' : ''))] : []),
+        ...(['sort', 'pack', 'matid', 'cmm'].includes(d.type) ? [f('GateDecision', '게이트 판별 결정', 'string', null, () => (st.item && st.gate?.id === st.item.id ? st.gate.text : '')), f('GateProduct', '게이트 판별 제품', 'string', null, () => (st.item && st.gate?.id === st.item.id ? st.gate.product ?? '' : ''))] : []),
         f('PartsStock', '부품 재고', 'int', 'pcs', () => st.parts ?? null),
         f('PowerKW', '전력', 'double', 'kW', () => (st.state === 'BUSY' ? d.busyKW : st.state === 'DOWN' || st.state === 'MAINT' ? d.idleKW * 0.5 : st.powerSave ? d.idleKW * 0.3 : d.idleKW)),
       ],

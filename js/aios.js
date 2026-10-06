@@ -223,7 +223,7 @@ export function buildAiosZip(P, zipStore, iso, runId, range = null) {
   const jl = (a) => enc.encode(a.map((x) => JSON.stringify(x)).join('\n') + (a.length ? '\n' : ''));
   const info = {
     dataset: 'jin3d_aios_ops', format: 'Jin-3D AIOS 운영 데이터셋 v1 (시계열·이벤트·의사결정·전이 JSONL)', generator: 'Jin-3D 디지털트윈 (시뮬레이션 데이터)',
-    run_id: runId, factory: '메타팩토리 정밀조립Zone', sample_period_s: SAMPLE_S, samples: S.length, start: iso(t0), end: iso(t1),
+    run_id: runId, factory: '메타팩토리 적응가공Zone', sample_period_s: SAMPLE_S, samples: S.length, start: iso(t0), end: iso(t1),
     features: FEATURES.map(([name, unit, desc]) => ({ name, unit, desc })),
     cell_ids: P.sim.processing.map((st) => st.uid ?? st.id), cell_feature: ['state', 'utilization', 'health_pct', 'queue', 'starved_ratio'],
     reward: 'good_delta − 3·fail_delta − 0.5·energy_delta_kwh (구간 보상)', policy_heads: HEADS, model: P.version,

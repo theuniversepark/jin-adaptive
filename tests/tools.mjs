@@ -8,7 +8,7 @@ const check = (name, ok, info = '') => { ok ? pass++ : fail++; console.log(`  ${
 const run = (s, ag, sec, each) => { for (let t = 0; t < sec; t += 0.1) { s.step(0.1); ag.update(0.1); each?.(); } };
 console.log('== 정비 도구 출동 (피지컬AI)');
 check('도구 세트 6종 (수리 · 예지정비 · 보정 · 누유 · 이물질 · 소화기) · 보관대는 정비실 안', ['repair', 'pm', 'cal', 'leak', 'debris', 'smoke'].every((k) => TOOL_KITS[k]?.items) && Object.keys(TOOL_KITS).every((k) => { const p = toolSpot(k); return p.x > 10 && p.x < 18 && p.z > 14 && p.z < 16.8; }));
-for (const [type, label] of [['leak', '바닥 누유'], ['debris', '바닥 이물질']]) {
+for (const [type, label] of [['leak', '절삭유 바닥 오염'], ['debris', '바닥 이물질']]) {
   const s = new Simulation('dark', 2, { line: zoneLine(), quiet: true }), ag = new FactoryAgent(s);
   run(s, ag, 120);
   const ev = s.injectFieldEvent(type, 4, 8.2);

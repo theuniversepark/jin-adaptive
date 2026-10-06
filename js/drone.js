@@ -7,7 +7,7 @@ export const dronePad = (i) => ({ x: DRONE_PAD.x + i * 3, z: DRONE_PAD.z });
 export const MISSION_PRIO = { field: 4, equipment: 3, parts: 2, supply: 1 };   // 출동 우선순위 (현장 이벤트 > 설비 고장 > 부품 결품 > 공급 차질)
 // 현장 중계 유지 시간: 안전·설비 문제는 해소될 때까지, 오래 끄는 물류 문제(결품·공급 차질)는 관찰 보고 후 90초만 중계하고 순찰로 돌아간다
 export const RELAY_MAX = { field: 600, equipment: 600, parts: 90, supply: 90 };
-// 드론 운용 대수 산정 (정밀조립Zone 76m × 40m + 입고·출하 도크, 순찰 지점 13곳, 비행 24분·충전 4분)
+// 드론 운용 대수 산정 (적응가공Zone 76m × 40m + 입고·출하 도크, 순찰 지점 13곳, 비행 24분·충전 4분)
 // 운영 시나리오: 자연 설비 고장·부품 결품 + 현장 이벤트 시간당 6건 + 90분마다 10분 공급 차질, 3시간 × 시드 3, 헤드리스 측정
 // 기준: ① 순찰 재방문 p95 ≤ 120초  ② 20초 넘게 이어진 인시던트에 20초 안 도착 ≥ 95%  ③ 가용 드론 0대 시간 ≤ 1%
 export const DRONE_SIZING = {

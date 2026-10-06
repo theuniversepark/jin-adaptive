@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Jin-3D</title>
+  <title>Jin-3D 적응가공</title>
   <link rel="stylesheet" href="css/style.css" />
   <script type="importmap">
     { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
@@ -33,8 +33,8 @@
     <div class="brand">
       <div class="logo">◆</div>
       <div>
-        <h1>Jin-3D</h1>
-        <p>레거시 → 자동화 → 피지컬AI 자율공장 시뮬레이션 에이전트</p>
+        <h1>Jin-3D · 적응가공</h1>
+        <p>피지컬AI 실증 메타팩토리 A-2 적응가공 존 · 레거시 → 자동화 → 피지컬AI</p>
       </div>
     </div>
     <button id="btnVla" class="dark-only vla-top" title="로봇 데이터·카메라 영상 → AI-ready 에피소드 → 서버 저장 → VLA 학습 → 평가 → 로봇 배포, 로봇별 에피소드 파일 다운로드">🧠 VLA 학습</button>
@@ -45,7 +45,7 @@
       <button data-mode="smart" class="on">자동화</button><i class="seg-arrow">›</i>
       <button data-mode="dark">피지컬AI</button>
     </div>
-    <button id="btnEstop" class="estop" title="상위 긴급 명령 — 정밀조립Zone 전체 비상정지 (발령 중에는 리셋 명령)">🛑 비상정지</button>
+    <button id="btnEstop" class="estop" title="상위 긴급 명령 — 적응가공Zone 전체 비상정지 (발령 중에는 리셋 명령)">🛑 비상정지</button>
     <div class="timectl">
       <button id="playBtn" class="icon" title="일시정지/재생">❚❚</button>
       <div class="seg small" id="speedSeg">
@@ -59,7 +59,7 @@
     </div>
   </header>
 
-  <button type="button" class="side-tgl" id="tglLeft" title="왼쪽 패널(정밀조립Zone) 숨기기 · 단축키 [">◀</button>
+  <button type="button" class="side-tgl" id="tglLeft" title="왼쪽 패널(적응가공Zone) 숨기기 · 단축키 [">◀</button>
   <button type="button" class="side-tgl" id="tglRight" title="오른쪽 패널(자율운영 에이전트) 숨기기 · 단축키 ]">▶</button>
   <aside class="panel left" id="kpiPanel">
     <div class="zone-card" id="zoneCard"></div>
@@ -102,7 +102,7 @@
     <div class="loop"><span>관찰</span>→<span>판단</span>→<span>실행</span></div>
     <div class="log" id="log"></div>
     <form class="chatbox" id="chatForm" autocomplete="off">
-      <input id="chatInput" placeholder="공정 지시 (예: 포장셀 속도 75%, 유압블록 2:1, 리어커버 조립셀 예방정비)" disabled />
+      <input id="chatInput" placeholder="공정 지시 (예: CMM 측정셀 속도 75%, 유압블록 2:1, 리어커버 선삭셀 예방정비)" disabled />
       <button type="submit" id="chatSend" disabled>전송</button>
     </form>
   </aside>

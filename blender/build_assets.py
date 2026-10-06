@@ -1,6 +1,6 @@
 # Jin-3D Blender 자산 생성 스크립트 — Blender(5.x)에서 실제로 모델링·재질 적용 후 glTF(.glb)로 내보낸다.
 # 실행: blender -b --python blender/build_assets.py   (또는 npm run blender:assets)
-# 결과: assets/blender/{amr,agv,forklift,drone,humanoid,quadruped,arm6,ammr,truck,gantry,eaxle,parts,doortrim,maint,primitives}.glb  +  assets/blender/preview.png (Blender Eevee 렌더 미리보기)
+# 결과: assets/blender/{amr,agv,forklift,drone,humanoid,quadruped,arm6,ammr,truck,gantry,parts,hblock,rcover,maint,primitives}.glb  +  assets/blender/preview.png (Blender Eevee 렌더 미리보기)
 #
 # 좌표: Blender는 Z가 위, glTF로 내보내면 +Y가 위가 된다 (Blender X → three X, Blender Z → three Y, Blender −Y → three +Z).
 #       three.js 모델의 "앞"(로컬 +z)은 Blender −Y 방향으로 만든다. 단위 1 = 1m (Jin-3D와 같은 크기·같은 원점: 바닥 중심)
@@ -542,77 +542,6 @@ def build_gantry():
 # ── e-axle (전기차 동축형 전동 구동축: 모터 + 감속기 + 인버터, 길이 1.04m · 지름 약 0.44m) — 축 = three.js x, 바닥(받침대) 원점
 # 모터·감속기 하우징 앞 위쪽을 잘라낸 단면(cutaway)으로 고정자 철심 · 구리 권선 · 회전자 · 헬리컬 기어가 보인다
 # 빈 객체 FastenBolts = 체결 공정 후에 보이는 플랜지 볼트 (코드가 켠다)
-def build_eaxle():
-    cz = 0.27
-    cast = mat('CastAlu', srgb('#b9bfc6'), 0.55, 0.38)
-    lam = mat('Lamination', srgb('#5d646e'), 0.5, 0.38)
-    copper = mat('Copper', srgb('#d9823f'), 0.7, 0.28)
-    gear = mat('GearSteel', srgb('#9aa2ab'), 0.95, 0.25)
-    orange = mat('HVOrange', srgb('#ff7a1a'), 0.1, 0.4)
-    inv = mat('InverterCase', srgb('#2c3138'), 0.4, 0.4)
-    St = MATS['Steel']; Bk = MATS['Bumper']
-    R = empty('Eaxle')
-    def cx(n, r, L, x, m, y=0.0, z=cz, verts=64, bevel=0.0, par=R): return cyl(n, r, L, (x, y, z), m, axis='X', parent=par, verts=verts, bevel=bevel)
-    def cut(o, lo, hi):   # 앞(−Y) 위(+Z) 사분면을 잘라낸다
-        bpy.ops.mesh.primitive_cube_add(size=1); c = bpy.context.active_object
-        c.scale = (hi - lo, 0.4, 0.4); c.location = ((lo + hi) / 2, -0.2, cz + 0.2)
-        md = o.modifiers.new('Cut', 'BOOLEAN'); md.object = c; md.operation = 'DIFFERENCE'; md.solver = 'EXACT'
-        bpy.context.view_layer.objects.active = o; bpy.ops.object.modifier_apply(modifier='Cut')
-        bpy.data.objects.remove(c, do_unlink=True)
-        return o
-    def hollow(o, r_in, x, L):
-        bpy.ops.mesh.primitive_cylinder_add(vertices=48, radius=r_in, depth=L, location=(x, 0, cz), rotation=(0, math.pi / 2, 0)); c = bpy.context.active_object
-        md = o.modifiers.new('Hole', 'BOOLEAN'); md.object = c; md.operation = 'DIFFERENCE'; md.solver = 'EXACT'
-        bpy.context.view_layer.objects.active = o; bpy.ops.object.modifier_apply(modifier='Hole')
-        bpy.data.objects.remove(c, do_unlink=True)
-        return o
-    # 받침대 (V블록)
-    for x in (-0.3, 0.3): box(f'Cradle_{x}', (0.1, 0.34, 0.1), (x, 0, 0.05), Bk, bevel=0.015, parent=R)
-    # 모터부 (x −0.06 ~ 0.44): 하우징(속 빈 원통) · 냉각 리브 · 고정자 · 권선 · 회전자
-    mh = cut(hollow(cx('MotorHousing', 0.19, 0.5, 0.19, cast), 0.172, 0.19, 0.46), 0.0, 0.4)
-    for k in range(7):
-        x = 0.03 + k * 0.055
-        cut(hollow(cx(f'CoolingRib_{k}', 0.202, 0.016, x, cast, verts=64), 0.185, x, 0.03), -0.1, 0.42)
-    cut(hollow(cx('Stator', 0.171, 0.3, 0.19, lam), 0.098, 0.19, 0.32), 0.0, 0.4)
-    for x in (0.02, 0.36):
-        bpy.ops.mesh.primitive_torus_add(major_radius=0.135, minor_radius=0.032, major_segments=48, minor_segments=12, location=(x, 0, cz), rotation=(0, math.pi / 2, 0))
-        o = finish(setname(bpy.context.active_object, f'EndWinding_{x}'), copper, parent=R); cut(o, -0.1, 0.42)
-    cx('Rotor', 0.09, 0.3, 0.19, lam, verts=48)
-    for k in range(6): cx(f'RotorBand_{k}', 0.0915, 0.008, 0.06 + k * 0.052, St, verts=48)
-    cx('Shaft', 0.035, 0.98, 0.0, St, verts=32)
-    cx('MotorEndCap', 0.175, 0.04, 0.455, cast, bevel=0.01)
-    # 감속기부 (x −0.48 ~ −0.06): 큰 하우징 · 아래 앞쪽 보조축 돌출 · 결합 플랜지 · 헬리컬 기어
-    gh = cut(hollow(cx('GearHousing', 0.22, 0.42, -0.27, cast), 0.2, -0.27, 0.38), -0.44, -0.1)
-    cut(cx('LayshaftBulge', 0.14, 0.34, -0.29, cast, y=-0.09, z=cz - 0.09, verts=48), -0.44, -0.1)
-    cx('JointFlange', 0.24, 0.035, -0.065, cast, verts=64, bevel=0.006)
-    for k in range(12):
-        a = k * math.pi * 2 / 12
-        cx(f'FlangeBolt_{k}', 0.012, 0.05, -0.065, St, y=math.cos(a) * 0.225, z=cz + math.sin(a) * 0.225, verts=6)
-    for n, r, w, x in (('GearA', 0.16, 0.06, -0.22), ('GearB', 0.1, 0.05, -0.36)):
-        g = cx(n, r, w, x, gear, verts=48)
-        for k in range(36 if r > 0.12 else 24):   # 기어 이(헬리컬 느낌으로 약간 비틀어)
-            a = k * math.pi * 2 / (36 if r > 0.12 else 24)
-            box(f'{n}_T{k}', (w, 0.016, 0.02), (x, math.cos(a) * (r + 0.008), cz + math.sin(a) * (r + 0.008)), gear, parent=R, rot=(a, 0, 0.35))
-    cx('GearShaft', 0.05, 0.3, -0.29, St, y=-0.09, z=cz - 0.09, verts=24)
-    cx('GearHousingCap', 0.205, 0.035, -0.49, cast, bevel=0.01)
-    # 출력 플랜지 (양 끝, 6각 볼트 플랜지)
-    for sd, x0 in ((1, 0.475), (-1, -0.505)):
-        cx(f'OutShaft_{sd}', 0.045, 0.05, x0 + sd * 0.01, St, verts=32)
-        cx(f'OutFlange_{sd}', 0.085, 0.03, x0 + sd * 0.04, St, verts=6, bevel=0.006)
-    # 인버터 (모터 위 뒤쪽) · 고전압 커넥터 · 케이블
-    box('Inverter', (0.34, 0.2, 0.1), (0.2, 0.06, cz + 0.235), inv, bevel=0.02, parent=R)
-    for k in range(5): box(f'InvRib_{k}', (0.3, 0.008, 0.015), (0.2, -0.02 + k * 0.04, cz + 0.292), inv, parent=R)
-    box('HVConnector', (0.07, 0.06, 0.06), (0.04, 0.1, cz + 0.27), orange, bevel=0.01, parent=R)
-    c = cyl('HVCable', 0.02, 0.2, (-0.06, 0.1, cz + 0.27), orange, axis='X', parent=R, verts=16)
-    box('InvMount', (0.3, 0.12, 0.05), (0.2, 0.08, cz + 0.17), cast, parent=R)
-    # 체결 볼트 (체결 공정 후 표시): 양 끝 덮개 둘레
-    B = empty('FastenBolts', (0, 0, 0), R)
-    for x, rr in ((0.48, 0.15), (-0.515, 0.17)):
-        for k in range(8):
-            a = k * math.pi * 2 / 8 + 0.2
-            cyl(f'FBolt_{x}_{k}', 0.014, 0.03, (x, math.cos(a) * rr, cz + math.sin(a) * rr), MATS['Yellow'], axis='X', parent=B, verts=6)
-    export(R, 'eaxle')
-
 # ── 조립·체결 부품 (실물 형상, 화면에서 보이도록 실제의 약 2배 크기) — 각 부품은 빈 객체 P_* (바닥 = 원점, 위 = +Z)
 # e-axle 조립: P_Gear(헬리컬 기어) · P_Shaft(계단 축·스플라인) · P_Bearing(볼베어링) · P_Seal(오일씰)
 # 도어트림 조립: P_CupHolder(컵홀더) · P_Armrest(암레스트 패드) · P_Grille(스피커 그릴) · P_Switch(윈도 스위치)
@@ -736,33 +665,70 @@ def build_maint_preview():
 
 # ── 도어트림 (차량 앞문 내장 패널, 길이 0.8 × 높이 0.6 × 두께 약 0.12m) — 세워 둔 모양: 면 = 앞(−Y, three.js +z), 바닥 중심 원점
 # 기재 패널 · 윗부분 소프트 벨트라인 · 가운데 직물 인서트 · 암레스트와 손잡이 홈 · 윈도 스위치 · 인사이드 핸들 · 스피커 그릴 · 맵 포켓
-def build_doortrim():
-    base = mat('TrimPlastic', srgb('#3c3f44'), 0.0, 0.6)
-    soft = mat('TrimSoft', srgb('#25272b'), 0.0, 0.55)
-    fabric = mat('TrimFabric', srgb('#8b8379'), 0.0, 0.85)
-    leather = mat('Leather', srgb('#6f6a64'), 0.0, 0.7)
-    chrome = mat('Chrome', srgb('#e4e8ec'), 1.0, 0.12)
-    R = empty('Doortrim')
-    p = box('Trim_Panel', (0.8, 0.05, 0.56), (0, 0, 0.29), base, bevel=0.03, parent=R)
-    bpy.ops.mesh.primitive_cube_add(size=1, location=(0.47, 0, 0.0), rotation=(0, math.radians(35), 0)); c = bpy.context.active_object; c.scale = (0.3, 0.3, 0.3)
-    md = p.modifiers.new('Cut', 'BOOLEAN'); md.object = c; md.operation = 'DIFFERENCE'; md.solver = 'EXACT'
-    bpy.context.view_layer.objects.active = p; bpy.ops.object.modifier_apply(modifier='Cut'); bpy.data.objects.remove(c, do_unlink=True)
-    box('Trim_Beltline', (0.8, 0.075, 0.09), (0, -0.01, 0.53), soft, bevel=0.03, parent=R)
-    box('Trim_Insert', (0.52, 0.012, 0.17), (0.04, -0.03, 0.38), fabric, bevel=0.01, parent=R)
-    box('Trim_Armrest', (0.52, 0.09, 0.06), (0.04, -0.065, 0.265), leather, bevel=0.025, parent=R)
-    box('Trim_PullCup', (0.13, 0.05, 0.025), (-0.13, -0.085, 0.29), soft, bevel=0.01, parent=R)
-    box('Trim_SwitchPanel', (0.16, 0.06, 0.014), (0.19, -0.075, 0.298), soft, bevel=0.005, parent=R)
-    for k in range(4): box(f'Trim_Btn_{k}', (0.024, 0.03, 0.01), (0.135 + k * 0.036, -0.075, 0.309), mat('SwitchBtn', srgb('#3c4148'), 0.1, 0.4), bevel=0.003, parent=R)
-    box('Trim_HandleRecess', (0.16, 0.012, 0.06), (-0.28, -0.03, 0.44), soft, bevel=0.01, parent=R)
-    box('Trim_Handle', (0.12, 0.02, 0.022), (-0.28, -0.042, 0.44), chrome, bevel=0.008, parent=R)
-    cyl('Trim_Speaker', 0.085, 0.014, (-0.22, -0.03, 0.13), soft, axis='Y', parent=R, verts=48, bevel=0.004)
-    for k, r in enumerate((0.025, 0.045, 0.065, 0.08)):
-        bpy.ops.mesh.primitive_torus_add(major_radius=r, minor_radius=0.0028, major_segments=48, minor_segments=6, location=(-0.22, -0.038, 0.13), rotation=(math.pi / 2, 0, 0))
-        finish(setname(bpy.context.active_object, f'Trim_SpkRing_{k}'), chrome if k == 3 else base, parent=R)
-    box('Trim_Pocket', (0.36, 0.05, 0.1), (0.12, -0.045, 0.1), soft, bevel=0.015, parent=R)
-    box('Trim_PocketLip', (0.36, 0.012, 0.012), (0.12, -0.072, 0.15), chrome, parent=R)
-    for x in (-0.3, 0.0, 0.3): cyl(f'Trim_Clip_{x}', 0.012, 0.03, (x, 0.035, 0.3), mat('Nylon', srgb('#e9e6df'), 0.0, 0.5), axis='Y', parent=R, verts=12)
-    export(R, 'doortrim')
+# ── 적응가공 제품 (대승정밀) — 화면에서 보이도록 실물의 2배 크기. 상태별 빈 객체: Raw(소재) · Machined(가공면·홀) · Finish(사선홀·디버링 / 보어 선삭)
+# 유압블록: 브레이크 유압제어블록 A6082-T6 125×136×44mm — 지그 팔레트 하나에 2×2개 (팔레트 0.66 × 0.62m)
+def build_hblock():
+    billet = mat('Billet', srgb('#9ea5ad'), 0.6, 0.62)        # 압출 소재 (무광)
+    alu = mat('MachinedAlu', srgb('#dfe5ea'), 0.95, 0.16)     # 가공면 (광택)
+    hole = mat('HoleDark', srgb('#20252b'), 0.6, 0.35)
+    thread = mat('ThreadBrass', srgb('#c9a24a'), 0.8, 0.3)
+    jig = mat('JigPallet', srgb('#2d343c'), 0.5, 0.45)
+    R = empty('Hblock')
+    box('Jig_Plate', (0.66, 0.62, 0.04), (0, 0, 0.02), jig, bevel=0.01, parent=R)
+    for x in (-0.31, 0.31): box(f'Jig_Rail_{x}', (0.03, 0.6, 0.03), (x, 0, 0.055), MATS['Steel'], parent=R)
+    W, D, H = 0.25, 0.272, 0.088   # 125 × 136 × 44mm × 2
+    raw = empty('Raw', (0, 0, 0), R); mac = empty('Machined', (0, 0, 0), R); fin = empty('Finish', (0, 0, 0), R)
+    for i, (cx, cy) in enumerate(((-0.16, -0.15), (0.16, -0.15), (-0.16, 0.15), (0.16, 0.15))):
+        for k in (-1, 1): box(f'Clamp_{i}_{k}', (0.03, 0.05, 0.05), (cx + k * (W / 2 + 0.02), cy, 0.065), MATS['Yellow'], bevel=0.005, parent=R)
+        box(f'RawBlock_{i}', (W + 0.008, D + 0.008, H + 0.01), (cx, cy, 0.04 + (H + 0.01) / 2), billet, bevel=0.004, parent=raw)
+        box(f'Block_{i}', (W, D, H), (cx, cy, 0.04 + H / 2), alu, bevel=0.006, parent=mac)
+        top = 0.04 + H
+        # 윗면: 슬리브 보어 2 · 일반홀 · 탭 (어두운 원판으로 구멍 표현)
+        for j, (hx, hy, r) in enumerate(((-0.06, 0.05, 0.028), (0.06, 0.05, 0.028), (0.0, -0.06, 0.018), (-0.09, -0.09, 0.009), (0.09, -0.09, 0.009), (0.09, 0.1, 0.009), (-0.09, 0.1, 0.009))):
+            cyl(f'Hole_{i}_{j}', r, 0.004, (cx + hx, cy + hy, top + 0.0005), hole, parent=mac, verts=24)
+            if r < 0.01: cyl(f'Tap_{i}_{j}', r * 0.7, 0.005, (cx + hx, cy + hy, top + 0.001), thread, parent=mac, verts=12)
+        # 옆면 포트 (앞면 −Y)
+        for j, hx in enumerate((-0.07, 0.0, 0.07)): cyl(f'Port_{i}_{j}', 0.014, 0.004, (cx + hx, cy - D / 2 - 0.001, 0.04 + H / 2), hole, axis='Y', parent=mac, verts=20)
+        # 사선 유로홀 + 챔퍼 링 (2차 사선가공·디버링 후)
+        for j, (hx, hy) in enumerate(((-0.035, -0.02), (0.035, -0.02))):
+            cyl(f'Diag_{i}_{j}', 0.008, 0.006, (cx + hx, cy + hy, top + 0.0015), hole, parent=fin, verts=16)
+            bpy.ops.mesh.primitive_torus_add(major_radius=0.012, minor_radius=0.002, major_segments=24, minor_segments=6, location=(cx + hx, cy + hy, top + 0.002))
+            finish(setname(bpy.context.active_object, f'Chamfer_{i}_{j}'), alu, parent=fin)
+    export(R, 'hblock')
+
+# 리어커버: 8속 변속기 리어커버 ADC12 다이캐스팅 270×255mm — 1개 (0.54 × 0.51m), 높이 약 0.14m
+def build_rcover():
+    cast = mat('DieCast', srgb('#8f969d'), 0.45, 0.72)        # 다이캐스팅 주물면
+    alu = mat('MachinedAlu', srgb('#dfe5ea'), 0.95, 0.16)
+    hole = mat('HoleDark', srgb('#20252b'), 0.6, 0.35)
+    jig = mat('JigPallet', srgb('#2d343c'), 0.5, 0.45)
+    R = empty('Rcover')
+    box('Jig_Plate', (0.66, 0.62, 0.04), (0, 0, 0.02), jig, bevel=0.01, parent=R)
+    for x, y in ((-0.27, -0.25), (0.27, -0.25), (-0.27, 0.25), (0.27, 0.25)): cyl(f'Locator_{x}_{y}', 0.018, 0.06, (x, y, 0.07), MATS['Steel'], parent=R, verts=16)
+    body = empty('Body', (0, 0, 0), R)
+    z0 = 0.04
+    # 본체: 둥근 사각 쉘 (원기둥 2개 + 상자 결합 느낌) · 리브 · 보스 — 주물면
+    box('Shell', (0.46, 0.43, 0.09), (0, 0, z0 + 0.045), cast, bevel=0.04, parent=body)
+    cyl('Dome', 0.17, 0.05, (0.03, 0.02, z0 + 0.115), cast, parent=body, verts=48, bevel=0.012)
+    for k in range(6):
+        a = k * math.pi / 3 + 0.3
+        box(f'Rib_{k}', (0.12, 0.014, 0.05), (0.03 + math.cos(a) * 0.16, 0.02 + math.sin(a) * 0.16, z0 + 0.085), cast, parent=body, rot=(0, 0, a))
+    # 볼트 플랜지 보스 (둘레 10곳)
+    bosses = [(-0.25, -0.2), (0, -0.235), (0.25, -0.2), (0.27, 0), (0.25, 0.2), (0, 0.235), (-0.25, 0.2), (-0.27, 0), (-0.13, -0.23), (0.13, 0.23)]
+    for k, (x, y) in enumerate(bosses): cyl(f'Boss_{k}', 0.026, 0.07, (x, y, z0 + 0.035), cast, parent=body, verts=20)
+    # 가공 후: 플랜지 기준면(보스 윗면) · 볼트홀 · 돔 윗면 · 오일 포트
+    mac = empty('Machined', (0, 0, 0), R)
+    for k, (x, y) in enumerate(bosses):
+        cyl(f'BossFace_{k}', 0.027, 0.004, (x, y, z0 + 0.071), alu, parent=mac, verts=20)
+        cyl(f'BoltHole_{k}', 0.011, 0.005, (x, y, z0 + 0.072), hole, parent=mac, verts=16)
+    cyl('DomeFace', 0.165, 0.004, (0.03, 0.02, z0 + 0.141), alu, parent=mac, verts=48)
+    for k, (x, y) in enumerate(((-0.15, 0.08), (-0.16, -0.08))): cyl(f'OilPort_{k}', 0.018, 0.005, (x, y, z0 + 0.092), hole, parent=mac, verts=20)
+    # 선삭 후: 베어링 보어 (광택 내경 링 + 어두운 구멍)
+    fin = empty('Finish', (0, 0, 0), R)
+    bpy.ops.mesh.primitive_torus_add(major_radius=0.075, minor_radius=0.012, major_segments=48, minor_segments=10, location=(0.03, 0.02, z0 + 0.143))
+    finish(setname(bpy.context.active_object, 'BoreRing'), alu, parent=fin)
+    cyl('Bore', 0.064, 0.006, (0.03, 0.02, z0 + 0.144), hole, parent=fin, verts=48)
+    export(R, 'rcover')
 
 # ── 정비실 비품 (각 빈 객체 M_*: 바닥 중심 원점, 앞면 = −Y(three.js +z)) — 정비 도구 · 유틸리티 · 청소도구
 def build_maint():
@@ -955,10 +921,11 @@ def build_primitives():
     print('primitives', len(keys))
 
 reset(); MATS.clear(); build_primitives()
-for fn in (build_amr, build_agv, build_forklift, build_drone, build_humanoid, build_quadruped, build_arm6, build_ammr, build_truck, build_gantry, build_eaxle, build_parts, build_doortrim, build_maint):
+for fn in (build_amr, build_agv, build_forklift, build_drone, build_humanoid, build_quadruped, build_arm6, build_ammr, build_truck, build_gantry, build_parts, build_hblock, build_rcover, build_maint):
     reset(); MATS.clear(); common_mats(); fn()
 try:
-    preview(); preview_humanoid(); preview_one(build_quadruped, 'quadruped', (-1.9, -2.15, 1.45), (70, 0, -42), 40, (960, 720)); preview_one(build_eaxle, 'eaxle', (1.25, -1.45, 0.95), (68, 0, 40), 45, (960, 640)); preview_one(build_maint_preview, 'maint', (0.0, -6.2, 2.4), (75, 0, 0), 32, (1400, 560)); preview_one(build_doortrim, 'doortrim', (0.35, -1.45, 0.62), (80, 0, 13), 45, (900, 600)); preview_one(build_parts_preview, 'parts', (0.0, -1.5, 0.55), (70, 0, 0), 34, (1400, 460)); preview_one(build_truck_fork, 'truck', (11.5, -9.5, 4.6), (72, 0, 52), 32, (1280, 720))
+    preview_one(build_hblock, 'hblock', (0.0, -1.25, 1.0), (52, 0, 0), 40, (900, 600)); preview_one(build_rcover, 'rcover', (0.0, -1.25, 1.0), (52, 0, 0), 40, (900, 600))
+    preview(); preview_humanoid(); preview_one(build_quadruped, 'quadruped', (-1.9, -2.15, 1.45), (70, 0, -42), 40, (960, 720)); preview_one(build_maint_preview, 'maint', (0.0, -6.2, 2.4), (75, 0, 0), 32, (1400, 560)); preview_one(build_parts_preview, 'parts', (0.0, -1.5, 0.55), (70, 0, 0), 34, (1400, 460)); preview_one(build_truck_fork, 'truck', (11.5, -9.5, 4.6), (72, 0, 52), 32, (1280, 720))
 except Exception as e:   # 렌더 장치가 없는 환경에서는 미리보기만 건너뛴다
     print('preview skipped:', e)
 print('Jin-3D Blender assets →', os.path.abspath(OUT), sorted(os.listdir(OUT)))

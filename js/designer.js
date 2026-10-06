@@ -179,7 +179,7 @@ export class LineDesigner {
     if (!this.open) return;
     if (!this.busy) $('dockStatus').innerHTML = '';
     $('lineName').value = this.draft.name ?? '';
-    // 정밀조립Zone은 셀이 바닥에 고정되어 있어 레이아웃·셀 구성·순서·유형은 잠그고 레시피만 편집한다
+    // 적응가공Zone은 셀이 바닥에 고정되어 있어 레이아웃·셀 구성·순서·유형은 잠그고 레시피만 편집한다
     const zone = isZone(this.draft);
     $('lineLayout').innerHTML = zone
       ? `<option value="zone" selected>${esc(layoutLabel('zone'))}</option>`

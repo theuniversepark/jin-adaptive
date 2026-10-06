@@ -384,7 +384,7 @@ export class Simulation {
     // 입구 → 셀 중앙 진입 시간 (표시·텔레메트리용): AMR은 라인 주행 속도 그대로, 컨베이어는 0.5초
     this.entryTime = this.useAMR ? 2 / ZONE_AMR.lineSpeed : 0.5;
     this.standby = []; this.idleLinks = [];
-    // 설비 연결: 직렬 라인은 앞뒤로, 정밀조립Zone은 분기(부품분류 → 제품별 라인)·합류(→ 포장) 그래프
+    // 설비 연결: 직렬 라인은 앞뒤로, 적응가공Zone은 분기(소재 식별 → 제품별 가공 라인)·합류(→ CMM 측정) 그래프
     // st.ins: 들어오는 연결들, st.outs[제품]: 제품별 나가는 연결 (공통이면 '*')
     this.conveyors = [];
     for (const st of this.stations) { st.ins = []; st.outs = {}; }
@@ -455,7 +455,7 @@ export class Simulation {
     }
     this.workers = [];
     this.setupWorkers();
-    // 정밀조립Zone: 조립 대상물을 싣고 셀 사이를 오가는 AMR (컨베이어 대신)
+    // 적응가공Zone: 조립 대상물을 싣고 셀 사이를 오가는 AMR (컨베이어 대신)
     this.carriers = [];
     if (this.useAMR) {
       for (let i = 0; i < ZONE_AMR.count; i++) {
@@ -531,7 +531,7 @@ export class Simulation {
     const segDist = (ax, az, bx, bz, px, pz) => { const vx = bx - ax, vz = bz - az, L = vx * vx + vz * vz || 1; const t = Math.max(0, Math.min(1, ((px - ax) * vx + (pz - az) * vz) / L)); return Math.hypot(px - ax - vx * t, pz - az - vz * t); };
     for (const o of this.senseList ?? this.movers) {
       if (o === m || o.state === 'line') continue;
-      if (o.owner === m) { const e = m.path?.[m.path.length - 1]; if (!e || Math.hypot(e.x - m.home.x, e.z - m.home.z) < 1.3) continue; }   // 자기 도크는 들어가고 나올 때만 무시 — 그 밖에는 자기 도크 기둥도 피한다
+      if (o.owner === m) { const e = m.path?.[m.path.length - 1], n = m.path?.[0]; if (!e || Math.hypot(e.x - m.home.x, e.z - m.home.z) < 1.3 || (n && Math.hypot(n.x - m.home.x, n.z - m.home.z) < 0.3)) continue; }   // 다음 경유점이 자기 도크 자리(도크에서 나가는 중)여도 무시   // 자기 도크는 들어가고 나올 때만 무시 — 그 밖에는 자기 도크 기둥도 피한다
       // 나란한 도크 앞 줄(도크 앞 1.1m)을 따라 옆 도크 앞을 지나는 것은 정해진 동선 — 옆 도크를 장애물로 보지 않는다
       if (o.kind === 'dock' && m.home?.heading != null && o.heading === m.home.heading && Math.abs(Math.sin(o.heading) * (m.x - o.owner.home.x) + Math.cos(o.heading) * (m.z - o.owner.home.z) - 1.1) < 0.4 && Math.abs(dir.x * Math.sin(o.heading) + dir.z * Math.cos(o.heading)) < 0.3) continue;
       const rx = o.x - m.x, rz = o.z - m.z;
@@ -1007,11 +1007,11 @@ export class Simulation {
 
   // ── 분류·포장 게이트 (혼류) ─────────────────
   // 셀 입구의 게이트가 들어오는 대상물을 비전·ID로 판별해 결정을 내리고, 그 결정에 맞는 로봇이 주 작업을 맡는다.
-  // 분류셀: 유압블록/리어커버 판별 → 해당 제품 라인으로 분기 + 그 제품 쪽 로봇이 제품별 부품 키팅, 반대쪽 로봇은 작업물 고정·ID 태그
-  // 포장셀: 유압블록 → 트레이 포장 / 리어커버 → 크레이트 포장 — 그 포장재 매거진 쪽 로봇이 포장, 반대쪽 로봇은 고정·라벨
+  // 소재 식별·3D측정셀: 유압블록/리어커버 소재 판별 → 해당 제품 가공 라인으로 분기 + 그 제품 쪽 로봇이 클램핑·스캔 정렬, 반대쪽 로봇은 팔레트 고정·ID 태그
+  // 초정밀 측정·리워크셀: 제품별 측정 프로그램 → CMM 판정(합격·리워크·폐기)을 게이트 표시판에 — 그 제품 쪽 로봇이 측정지그 세팅, 반대쪽 로봇은 고정·라벨
   // 로봇 쪽: 유압블록 = +z(홀수 번째 로봇), 리어커버 = −z(짝수 번째 로봇). 같은 쪽 로봇이 없으면 첫 로봇이 맡는다
   gateDecide(st) {
-    if (st.def.type !== 'sort' && st.def.type !== 'pack') return;
+    if (!['sort', 'pack', 'matid', 'cmm'].includes(st.def.type)) return;
     const it = st.item, n = st.def.robot?.count ?? 0, all = [...Array(n).keys()];
     if (!it.product || it.scrap) {
       st.gate = { id: it.id, product: null, t: this.time, text: it.scrap ? '빈 AMR — 작업 없이 통과' : '판별 완료', lead: it.scrap ? [] : all, role: null };
@@ -1020,11 +1020,11 @@ export class Simulation {
     const side = it.product === 'hblock' ? 1 : -1, P = ZONE_PRODUCTS[it.product]?.label ?? it.product;
     let lead = all.filter((i) => (i % 2 ? 1 : -1) === side);
     if (!lead.length) lead = n ? [0] : [];
-    const sort = st.def.type === 'sort', tray = it.product === 'hblock';
+    const sort = st.def.type === 'sort' || st.def.type === 'matid';
     st.gate = {
       id: it.id, product: it.product, t: this.time, lead,
-      text: sort ? `${P} → ${P} 라인 · ${P} 키트` : `${P} → ${tray ? '트레이' : '크레이트'} 포장`,
-      role: sort ? { lead: `${P} 부품 키팅`, support: '작업물 고정 · ID 태그' } : { lead: `${P} ${tray ? '트레이' : '크레이트'} 포장`, support: '작업물 고정 · 라벨' },
+      text: sort ? `${P} → ${P} 라인 · ${this.adaptive?.mode.scan ? '가공여유 3D 스캔' : '소재 ID 확인'}` : `${P} → CMM 측정 (${P} 측정 프로그램)`,
+      role: sort ? { lead: `${P} 소재 클램핑 · 3D 스캔 정렬`, support: '팔레트 고정 · 소재 ID 태그' } : { lead: `${P} 측정지그 세팅 · 판정 분류`, support: '팔레트 고정 · 판정 라벨' },
     };
     st.gateCount ??= {}; st.gateCount[it.product] = (st.gateCount[it.product] ?? 0) + 1;
     // 결정 기록 (FACOS 셀·게이트 화면): 최근 40건 + 로봇별 주 작업 횟수
@@ -1120,7 +1120,7 @@ export class Simulation {
       }
       if (st.done && st.item) {
         const out = this.outFor(st, st.item);
-        // 분기 셀(부품분류)은 출구 구간을 여러 연결이 함께 쓰므로, 모든 출구 앞이 비었을 때만 내보낸다
+        // 분기 셀(소재 식별)은 출구 구간을 여러 연결이 함께 쓰므로, 모든 출구 앞이 비었을 때만 내보낸다
         if (this.hasSpace(out) && Object.values(st.outs).every((c) => this.hasSpace(c))) {
           out.items.push({ item: st.item, s: 0 });
           st.item = null; st.done = false; st.state = 'IDLE';
@@ -1160,6 +1160,10 @@ export class Simulation {
       // 레거시: CMM은 하루 2회 측정실 샘플 검사 — 나머지는 외관 확인만 (편차를 못 보고 통과)
       const sampled = m.key !== 'traditional' || it.broken || this.rand() < 0.35;
       const res = sampled ? this.adaptive.onMeasure(st, it) : 'ok';
+      if (st.gate?.id === it.id) {
+        const P = ZONE_PRODUCTS[it.product]?.label ?? '', dv = it.dev != null ? `${it.dev > 0 ? '+' : ''}${it.dev}µm` : '';
+        st.gate = { ...st.gate, result: res, text: !sampled ? `${P} → 외관 확인만 (샘플 검사 아님)` : res === 'ok' ? `${P} 합격 ${dv} → 적재` : res === 'rework' ? `${P} NG(${it.burr ? '버 잔존' : `잔량 ${dv}`}) → 리워크` : `${P} 폐기 ${it.broken ? '(공구 파손 손상)' : dv} → 배출` };
+      }
       if (!sampled) {   // 측정하지 않은 소재는 편차가 있어도 그대로 합격 처리 → 유출 불량
         if (Object.values(it.devs ?? {}).some((d) => Math.abs(d) > 20) || it.burr) it.defect = true;
         it.packed = true; return;

@@ -69,7 +69,7 @@ export class OrchView {
       ? `<div class="cb-args"><span>${C.icon} ${esc(C.label)}</span>${C.args.map((a) => btn(code, C, a)).join('')}</div>` : btn(code, C)).join('');
     this.el.innerHTML = head + `<div class="cmd-b">
       <div class="cmd-ctl">
-        <label class="cmd-tg">대상 <select id="cmdTarget"><option value="all" ${this.target === 'all' ? 'selected' : ''}>정밀조립Zone 전체</option>${cells}</select></label>
+        <label class="cmd-tg">대상 <select id="cmdTarget"><option value="all" ${this.target === 'all' ? 'selected' : ''}>적응가공Zone 전체</option>${cells}</select></label>
         <div class="cmd-grp emg"><h4>긴급 명령</h4><div class="cmd-btns">${group('emergency')}</div></div>
         <div class="cmd-grp"><h4>제어 명령</h4><div class="cmd-btns">${group('control')}</div></div>
         <p class="cmd-note" data-link></p>

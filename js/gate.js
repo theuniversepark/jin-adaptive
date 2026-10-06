@@ -32,7 +32,7 @@ export function evaluate(a, sim, agent) {
   const reject = (reason, alt) => ({ checks, verdict: 'reject', reason, alt, summary: describe(a, sim) });
   if (!a || a.type === 'unknown') {
     add('parse', 'fail', `"${a?.clause ?? ''}" — 알아들을 수 있는 공정 지시가 아닙니다`);
-    return reject('지시를 해석하지 못함', '예: 포장셀 속도 75% · 유압블록 2:1 · 리어커버 조립셀 예방정비');
+    return reject('지시를 해석하지 못함', '예: CMM 측정셀 속도 75% · 유압블록 2:1 · 리어커버 선삭셀 예방정비');
   }
   add('parse', 'pass', `"${a.clause}" → ${describe(a, sim)}`);
   if (a.type === 'status') {
@@ -43,12 +43,12 @@ export function evaluate(a, sim, agent) {
 
   if (a.type === 'command') {
     const C = COMMANDS[a.code];
-    if (!a.target) { add('target', 'fail', '대상 셀이 지정되지 않음'); return reject('대상 셀 미지정', `예: "포장셀 ${C.label}"`); }
+    if (!a.target) { add('target', 'fail', '대상 셀이 지정되지 않음'); return reject('대상 셀 미지정', `예: "CMM 측정셀 ${C.label}"`); }
     const av = K.availability(a.code, a.target, a.arg);
     const scope = av.reason && /셀을 고르면|Zone 전체에서만|대상 셀 없음/.test(av.reason);
     if (scope) { add('target', 'fail', av.reason); return reject(av.reason, C.scopes.includes('all') ? '대상을 "전체"로' : '셀 이름을 함께 쓰세요'); }
     const st = a.target !== 'all' ? sim.processing.find((x) => x.id === a.target) : null;
-    add('target', 'pass', st ? `${st.name} · 현재 ${ST_LABEL[st.state] ?? st.state}` : '정밀조립Zone 전체 (전 셀)');
+    add('target', 'pass', st ? `${st.name} · 현재 ${ST_LABEL[st.state] ?? st.state}` : '적응가공Zone 전체 (전 셀)');
     if (!av.ok && av.hard) { add('safety', 'fail', av.reason); return reject(av.reason, /리셋/.test(av.reason) ? '먼저 "비상정지 해제"' : /Zone 전체/.test(av.reason) ? '대상을 "전체"로 바꿔 지시' : null); }
     add('safety', 'pass', a.code === 'ESTOP' ? '비상정지는 항상 허용 (안전 우선)' : '인터록 통과 · 비상정지·보호정지 조건 충족');
     if (!av.ok) { add('feasible', 'fail', av.reason); return reject(av.reason === '전송 중…' ? '같은 명령이 이미 전송 중' : `변경 없음 — ${av.reason}`, null); }
@@ -74,7 +74,7 @@ export function evaluate(a, sim, agent) {
   }
 
   if (a.type === 'mix') {
-    if (!sim.zone) { add('target', 'fail', '정밀조립Zone 라인이 아님'); return reject('혼류 비율은 정밀조립Zone에서만', null); }
+    if (!sim.zone) { add('target', 'fail', '적응가공Zone 라인이 아님'); return reject('혼류 비율은 적응가공Zone에서만', null); }
     add('target', 'pass', `자재 투입 스테이션 · 현재 ${ZONE_MIXES[sim.line.mix]?.label}`);
     add('safety', 'pass', '정지 명령과 무관 (투입 순서만 변경)');
     if (sim.line.mix === a.mix) { add('feasible', 'fail', `이미 ${ZONE_MIXES[a.mix].label}`); return reject('변경 없음 — 이미 같은 비율', null); }

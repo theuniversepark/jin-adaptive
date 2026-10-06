@@ -72,7 +72,7 @@ const MAT = {
   bolt: std(0x30353b, { metalness: 0.8, roughness: 0.3 }),
   crate: std(0x8a78a8, { roughness: 0.8 }),
 };
-// 정밀조립Zone 셀 바닥 색: 공동·공용 / 유압블록 전용 / 리어커버 전용
+// 적응가공Zone 셀 바닥 색: 공동·공용 / 유압블록 전용 / 리어커버 전용
 const ZONE_COLOR = { shared: 0x2bb3a6, hblock: 0xf0a030, rcover: 0x9a6bff };
 const cellUse = (id) => ZONE_CELLS[id]?.product ?? 'shared';
 
@@ -260,55 +260,44 @@ function makeAGV(i) {
 }
 
 // 조립 대상물 운반 AMR — 리프트 위 지그 상판이 컨베이어 높이(BELT_Y)에 맞춰져 있다. 길이 방향이 로컬 +z
-// 제품 실물 이미지 (assets/doortrim.png · assets/eaxle.png) — 흰 바탕은 가장자리에서부터 채워 투명하게(부품 안쪽의 밝은 부분은 그대로)
-const IMG_TEX = new Map();
-function productTex(path, w, h) {
-  if (IMG_TEX.has(path)) return IMG_TEX.get(path);
-  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
-  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8; IMG_TEX.set(path, tex);
-  const img = new Image();
-  img.onload = () => {
-    const g = cv.getContext('2d'); g.drawImage(img, 0, 0, w, h);
-    const d = g.getImageData(0, 0, w, h), a = d.data, seen = new Uint8Array(w * h), stack = [];
-    const white = (i) => { const r = a[i * 4], gg = a[i * 4 + 1], b = a[i * 4 + 2]; return r > 226 && gg > 226 && b > 226 && Math.max(r, gg, b) - Math.min(r, gg, b) < 24; };
-    for (let k = 0; k < w; k++) stack.push(k, (h - 1) * w + k);
-    for (let k = 0; k < h; k++) stack.push(k * w, k * w + w - 1);
-    while (stack.length) { const i = stack.pop(); if (seen[i] || !white(i)) continue; seen[i] = 1; a[i * 4 + 3] = 0; const x = i % w, y = (i / w) | 0; if (x > 0) stack.push(i - 1); if (x < w - 1) stack.push(i + 1); if (y > 0) stack.push(i - w); if (y < h - 1) stack.push(i + w); }
-    g.putImageData(d, 0, 0); tex.needsUpdate = true;
-  };
-  img.src = path;
-  return tex;
-}
-// 이미지 판: 위면에 실물 이미지, 아래로 어두운 판을 겹쳐 두께감 (W × D, 두께 = layers × step)
-function makeImagePlate(tex, W, D, layers, step) {
-  const g = new THREE.Group(), top0 = 0.02 + layers * step;
-  const top = put(new THREE.Mesh(new THREE.PlaneGeometry(W, D), new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, roughness: 0.5, metalness: 0.1 })), 0, top0, 0, g);
-  top.rotation.x = -Math.PI / 2; top.castShadow = true;
-  for (let k = 1; k <= layers; k++) {
-    const m = put(new THREE.Mesh(new THREE.PlaneGeometry(W, D), new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, color: 0x4a4650, roughness: 0.8 })), 0, top0 - k * step, 0, g);
-    m.rotation.x = -Math.PI / 2;
+// ── 적응가공 제품 (Blender 모델 assets/blender/hblock·rcover.glb, 실물의 2배 크기) — 상태 노드 Raw(소재) · Machined(가공면·홀) · Finish(사선홀·디버링 / 보어 선삭)
+// 지그 팔레트(0.66 × 0.62m) 포함, 바닥 원점. Blender를 쓰지 않으면 같은 구성의 기본 도형 모델
+export const PRODUCT_H = { hblock: 0.13, rcover: 0.19 };
+const TAG_OK = emis(0x3dff8a, 1.5), TAG_RW = emis(0xf5b82e, 1.6);   // 측정 합격 라벨 (리워크 후 합격은 주황)
+const HOLE = std(0x20252b, { metalness: 0.5, roughness: 0.4 });
+function makeProductModel(kind) {
+  if (blenderOn() && RENDER.assets[kind]) {
+    const A = cloneAsset(kind), g = new THREE.Group(); g.add(A.root);
+    g.userData = { raw: A.find('Raw'), mac: A.find('Machined'), fin: A.find('Finish'), tagY: PRODUCT_H[kind] + 0.03, kind };
+    return g;
   }
-  g.userData.top = top0;
+  const g = new THREE.Group(), raw = put(new THREE.Group(), 0, 0, 0, g), mac = put(new THREE.Group(), 0, 0, 0, g), fin = put(new THREE.Group(), 0, 0, 0, g);
+  put(box(0.66, 0.04, 0.62, MAT.dark), 0, 0.02, 0, g);
+  if (kind === 'hblock') {
+    for (const [cx, cz] of [[-0.16, -0.15], [0.16, -0.15], [-0.16, 0.15], [0.16, 0.15]]) {
+      put(box(0.258, 0.098, 0.28, MAT.raw), cx, 0.089, cz, raw);
+      put(box(0.25, 0.088, 0.272, MAT.machined), cx, 0.084, cz, mac);
+      for (const [hx, hz, r] of [[-0.06, -0.05, 0.028], [0.06, -0.05, 0.028], [0, 0.06, 0.018]]) put(cyl(r, r, 0.004, HOLE, 16), cx + hx, 0.13, cz + hz, mac);
+      for (const hx of [-0.035, 0.035]) put(cyl(0.009, 0.009, 0.006, HOLE, 12), cx + hx, 0.131, cz + 0.02, fin);
+    }
+  } else {
+    put(box(0.46, 0.09, 0.43, MAT.raw), 0, 0.085, 0, g);
+    put(cyl(0.17, 0.17, 0.05, MAT.raw, 32), 0.03, 0.155, -0.02, g);
+    put(cyl(0.165, 0.165, 0.004, MAT.machined, 32), 0.03, 0.182, -0.02, mac);
+    put(cyl(0.075, 0.075, 0.006, MAT.machined, 32), 0.03, 0.185, -0.02, fin);
+    put(cyl(0.064, 0.064, 0.008, HOLE, 32), 0.03, 0.186, -0.02, fin);
+  }
+  g.userData = { raw, mac, fin, tagY: PRODUCT_H[kind] + 0.03, kind };
   return g;
 }
-// 유압블록: AMR 지그 상판(1.1 × 0.8m) 짧은 변에 맞춘 0.8m 정사각 (이미지 비율 그대로), 트림 패널 약 5cm
-function makeDoortrimPlate() { return makeImagePlate(productTex('assets/doortrim.png', 512, 512), 0.8, 0.8, 3, 0.016); }
-// 리어커버: 세로로 긴 단면 이미지(1:2)를 AMR 진행 방향(긴 변 1.1m)으로 눕혀 1.04 × 0.52m, 하우징 두께감 약 12cm. 체결 후 볼트 표시
-// Blender 리어커버 (원통형 동축 모터 + 감속기 + 인버터, 앞 위쪽 단면으로 권선·회전자·기어가 보임): 길이 1.04m를 AMR 진행 방향(x)으로, 체결 볼트 FastenBolts
-function makeEaxleModel() {
-  const A = cloneAsset('rcover'), g = new THREE.Group(); g.add(A.root);
-  g.userData = { bolts: A.find('FastenBolts'), tagY: 0.66, blender: true };
-  return g;
+// 제품 상태 표시: 소재 → 가공(가공면·홀) → 사선·디버링 / 보어 선삭
+function styleProduct(m, it) {
+  const u = m.userData;
+  if (u.raw) u.raw.visible = !it.machined;
+  if (u.mac) u.mac.visible = !!it.machined;
+  if (u.fin) u.fin.visible = !!(it.deburred || it.turned);
 }
-function makeEaxlePlate() {
-  if (blenderOn()) return makeEaxleModel();
-  const g = new THREE.Group(), p = makeImagePlate(productTex('assets/eaxle.png', 256, 512), 0.52, 1.04, 6, 0.02);
-  p.rotation.y = Math.PI / 2; g.add(p);
-  const bolts = put(new THREE.Group(), 0, p.userData.top + 0.02, 0, g);
-  for (const sx of [-0.44, 0.44]) for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; put(cyl(0.022, 0.022, 0.04, MAT.bolt, 6), sx + Math.cos(a) * 0.07, 0, Math.sin(a) * 0.07, bolts); }
-  g.userData.bolts = bolts;
-  return g;
-}
+
 // ── Blender 옵션 모델 (assets/blender/*.glb) — 코드가 쓰는 부분(상태등 재질·적재물·로터·경광등)은 3D 모델과 같은 이름으로 넘긴다
 function makeAGVBlender() {
   const A = cloneAsset('agv'), g = new THREE.Group(); g.add(A.root);
@@ -375,7 +364,7 @@ function makeCarrierAMR() {
   return g;
 }
 
-// 정밀조립Zone 셀 바닥: 가운데 AMR 진입 통로(정차 위치 표시) + 양쪽 로봇 베이스 플레이트
+// 적응가공Zone 셀 바닥: 가운데 AMR 진입 통로(정차 위치 표시) + 양쪽 로봇 베이스 플레이트
 function cellBase(g, len = 4.6) {
   put(box(len, 0.06, 4.6, MAT.dark), 0, 0.03, 0, g);
   put(box(len, 0.01, 1.5, MAT.lane), 0, 0.065, 0, g);
@@ -939,11 +928,11 @@ function makeRobot(kind, color, opts = {}) {
 }
 
 // ── 조립·체결 부품 (Blender 실물 형상 assets/blender/parts.glb) — 셀별 부품 빈·피더·로봇 그리퍼에 놓는다
+// 적응가공 셀: 지그 팔레트 클램프 하드웨어 (클램프 볼트 · 너트 · 와셔 · 세트스크류) — 소재 하나에 한 세트
 const CELL_PARTS = {
-  HB_MILL: ['P_CupHolder', 'P_Armrest', 'P_Grille', 'P_Switch'],   // 유압블록 조립: 컵홀더 · 암레스트 · 스피커 그릴 · 윈도 스위치
-  RC_MILL: ['P_Gear', 'P_Shaft', 'P_Bearing', 'P_Seal'],            // 리어커버 조립: 헬리컬 기어 · 샤프트 · 베어링 · 오일씰
-  HB_DEBR: ['P_Screw', 'P_Clip', 'P_Washer', 'P_Nut'],              // 유압블록 체결: 나사 · 트림 클립 · 와셔 · 너트
-  RC_TURN: ['P_Bolt', 'P_Nut', 'P_Washer', 'P_Screw'],              // 리어커버 체결: 플랜지 볼트 · 너트 · 와셔 · 나사
+  HB_MILL: ['P_Bolt', 'P_Washer', 'P_Nut', 'P_Screw'], HB_DEBR: ['P_Screw', 'P_Washer', 'P_Nut', 'P_Bolt'],
+  RC_MILL: ['P_Bolt', 'P_Nut', 'P_Washer', 'P_Screw'], RC_TURN: ['P_Bolt', 'P_Washer', 'P_Screw', 'P_Nut'],
+  MATL: ['P_Bolt', 'P_Washer', 'P_Nut', 'P_Screw'], CMM: ['P_Screw', 'P_Bolt', 'P_Washer', 'P_Nut'],
 };
 const SMALL_PART = new Set(['P_Screw', 'P_Bolt', 'P_Nut', 'P_Washer', 'P_Clip']);
 const cellParts = (st) => (blenderOn() && RENDER.assets.parts ? CELL_PARTS[st?.id] ?? null : null);
@@ -978,11 +967,13 @@ function placeRobots(g, st) {
   if (!count || kind === 'none') return { group, robots };
   const color = st.type === 'paint' ? MAT.white : MAT.orange;
   const zr = st.type === 'paint' ? 1.4 : 1.7;
-  // 정밀조립Zone: AMR 통로를 사이에 두고 양쪽에서 마주 보는 배치
+  // 적응가공Zone: AMR 통로를 사이에 두고 양쪽에서 마주 보는 배치
   // 피지컬AI VLA: 6축 로봇은 대상물에 손이 닿도록 통로 쪽으로 조금 더 다가선다 (AMR 통과 폭은 유지)
-  const vla = st.vla && (kind === 'cobot' || kind === 'articulated');
+  const tend = TEND_TYPES.has(st.type);   // 머신텐딩: AMR 위 소재 ↔ 가공기 안 지그 (VLA 로딩 Skill — 부품 선반 없음)
+  const vla = st.vla && (kind === 'cobot' || kind === 'articulated') && !tend;
   const zz = vla ? 1.4 : 1.75;
-  const slots = st.zone ? [[-0.75, -zz, 0], [-0.75, zz, Math.PI], [0.95, -zz, 0], [0.95, zz, Math.PI]]
+  const slots = tend ? [[TEND.robot.x, TEND.robot.z, 0], [-TEND.robot.x, TEND.robot.z, 0]]
+    : st.zone ? [[-0.75, -zz, 0], [-0.75, zz, Math.PI], [0.95, -zz, 0], [0.95, zz, Math.PI]]
     : [[-0.6, -zr, 0], [0.6, zr, Math.PI], [1.3, -zr, 0], [-1.3, zr, Math.PI]];
   // 갠트리는 대수만큼 셀 길이를 나눠 X축 주행 범위를 정한다 (1대: ±1.0m)
   const gx = count === 1 ? 1.0 : Math.max(0.3, 1.2 / (count - 1) - 0.25);
@@ -996,6 +987,7 @@ function placeRobots(g, st) {
       r.slot = { x, z: kind === 'ammr' ? Math.sign(z) * AMMR.slotZ : z, yaw, side: Math.sign(z) };
     }
     r.phase = i * 1.3;
+    if (tend) r.tend = true;
     r.root.traverse((o) => { o.userData.robotIdx = i; });
     robots.push(r);
   }
@@ -1045,6 +1037,162 @@ function placeRobots(g, st) {
   return { group, robots, racks };
 }
 
+// ── 적응가공 셀 ─────────────────
+// 머신텐딩 셀(5축 가공·선삭): 셀 로컬 −z(Zone 안쪽)에 가공기, 6축 로봇이 AMR(셀 중앙) ↔ 가공기 안 지그로 소재를 옮긴다
+const TEND_TYPES = new Set(['mill5', 'turn']);
+export const TEND = { robot: { x: -1.25, z: -1.3 }, mc: { z: -3.25 }, table: { x: -0.1, y: 1.05, z: -3.05 }, door: { z: -2.2 } };
+// 가공 사이클 안의 로봇 구간: 로딩(집기 → 문 → 지그 안착) · 가공(문 닫힘) · 언로딩 (sim 진행률 p 기준)
+export const TEND_PH = { pick: 0.05, lift: 0.1, door: 0.17, load: 0.23, out: 0.29, cut0: 0.32, cut1: 0.8, reach: 0.84, grab: 0.88, back: 0.94, place: 0.98 };
+function mcEnclosure(g, w, d, h, z, col) {
+  const G = put(new THREE.Group(), 0, 0, z, g);
+  put(box(w, 0.35, d, MAT.dark), 0, 0.175, 0, G);                           // 베드
+  put(box(w, h - 0.35, 0.1, MAT.white), 0, 0.35 + (h - 0.35) / 2, -d / 2 + 0.05, G);   // 뒷면
+  for (const sx of [-1, 1]) put(box(0.1, h - 0.35, d, MAT.white), sx * (w / 2 - 0.05), 0.35 + (h - 0.35) / 2, 0, G);
+  put(box(w, 0.12, d, MAT.white), 0, h - 0.06, 0, G);                       // 지붕
+  put(box(w + 0.04, 0.1, 0.06, col), 0, h - 0.18, d / 2, G);                // 앞 상단 띠 (제품 색)
+  for (const sx of [-1, 1]) put(box((w - 1.3) / 2, h - 0.55, 0.08, MAT.white), sx * (w / 2 - (w - 1.3) / 4), 0.35 + (h - 0.55) / 2, d / 2 - 0.04, G);   // 앞면 (문 양옆)
+  put(box(1.3, 0.2, 0.08, MAT.white), 0, h - 0.3, d / 2 - 0.04, G);
+  // 자동 도어 (로봇 쪽 가운데, 옆으로 미끄러짐): 창 + 손잡이
+  const door = put(new THREE.Group(), 0, 0, d / 2 + 0.02, G);
+  put(box(1.3, h - 0.75, 0.05, MAT.white), 0, 0.35 + (h - 0.75) / 2, 0, door);
+  put(box(0.9, 0.7, 0.06, MAT.glass, false), 0, 1.45, 0, door);
+  put(box(0.06, 0.4, 0.06, MAT.steel), 0.5, 1.2, 0.04, door);
+  return { G, door, h, w, d };
+}
+// 5축 머시닝센터 (MAKINO a81nx / Mikron MILL P 800급): 트러니언 테이블 · 스핀들 헤드 · ATC 매거진 · 칩 컨베이어 · 절삭유 · FANUC 조작반
+function buildMill5(g, st) {
+  const col = std(ZONE_COLOR[st.def.product] ?? 0x2bb3a6, { roughness: 0.4 });
+  const E = mcEnclosure(g, 3.0, 2.0, 2.75, TEND.mc.z, col);
+  const tz = TEND.table.z - TEND.mc.z;
+  const trun = put(new THREE.Group(), TEND.table.x, 0.62, tz, E.G);         // 트러니언 (A축 기울기 · C축 회전)
+  for (const sx of [-0.55, 0.55]) put(box(0.14, 0.45, 0.5, MAT.dark), sx, 0.1, 0, trun);
+  const cradle = put(new THREE.Group(), 0, 0.28, 0, trun);
+  const table = put(cyl(0.36, 0.36, 0.08, MAT.steel, 28), 0, 0, 0, cradle);
+  put(box(0.7, 0.04, 0.6, MAT.dark), 0, 0.06, 0, cradle);                   // 지그 베이스
+  const head = put(new THREE.Group(), TEND.table.x, 2.05, tz, E.G);
+  put(box(0.5, 0.75, 0.5, MAT.dark), 0, 0.2, 0, head);
+  const spindle = put(cyl(0.11, 0.13, 0.32, MAT.steel, 18), 0, -0.32, 0, head);
+  put(cyl(0.035, 0.045, 0.22, MAT.machined, 10), 0, -0.25, 0, spindle);
+  const coolant = put(makeSparks(0x9fe8ff, 40, 0.035), 0, 0, 0, E.G);        // 절삭유 미스트
+  const chips = put(makeSparks(0xd8dde2, 30, 0.03), 0, 0, 0, E.G);           // 알루미늄 칩
+  // ATC 공구 매거진 (옆면 원판 · 공구 포트 24개)
+  const atc = put(new THREE.Group(), 1.62, 1.55, -0.1, E.G);
+  const disc = put(cyl(0.62, 0.62, 0.16, MAT.dark, 32), 0, 0, 0, atc); disc.rotation.z = Math.PI / 2;
+  for (let k = 0; k < 24; k++) { const a = (k / 24) * Math.PI * 2; put(cyl(0.035, 0.035, 0.22, k % 6 ? MAT.steel : MAT.yellow, 8), 0.12, Math.cos(a) * 0.52, Math.sin(a) * 0.52, disc).rotation.z = Math.PI / 2; }
+  // 칩 컨베이어 + 칩통 (옆 바닥) · 절삭유 탱크
+  put(box(0.5, 0.4, 2.0, MAT.dark), -1.75, 0.2, 0, E.G);
+  const bin = put(box(0.6, 0.55, 0.6, std(0x5a6470, { metalness: 0.4 })), -1.8, 0.28, 1.25, E.G);
+  put(box(0.55, 0.06, 0.55, std(0xc9ced4, { metalness: 0.7, roughness: 0.4 })), 0, 0.3, 0, bin);   // 칩 더미
+  put(box(0.9, 0.5, 0.5, std(0x3a6ea5)), 0.9, 0.25, -1.2, E.G);
+  // FANUC 조작반 (앞 오른쪽) + 엣지 디바이스 (진동·AE·전류 센서 수집)
+  const panel = put(box(0.55, 0.8, 0.2, MAT.dark), 1.25, 1.55, E.d / 2 + 0.12, E.G);
+  const screen = emis(0x58c4ff, 1.2); put(box(0.42, 0.3, 0.02, screen, false), 0, 0.15, 0.11, panel);
+  const edge = put(box(0.28, 0.18, 0.12, std(0x111418)), -1.25, 2.35, E.d / 2 + 0.07, E.G);
+  const edgeLed = emis(0x3ddc84, 2); put(box(0.2, 0.03, 0.01, edgeLed, false), 0, 0.03, 0.065, edge);
+  return { mc: E, door: E.door, head, spindle, cradle, table, coolant, chips, screen, edgeLed, tz };
+}
+// 복합 터닝센터 (DN솔루션즈 SMX5100급): 척 · 터렛 · 심압대 · 절삭력 센서(Kistler) — 소재를 세운 척에 물리고 돌린다
+function buildTurn(g, st) {
+  const col = std(ZONE_COLOR[st.def.product] ?? 0x2bb3a6, { roughness: 0.4 });
+  const E = mcEnclosure(g, 3.2, 2.0, 2.6, TEND.mc.z, col);
+  const tz = TEND.table.z - TEND.mc.z;
+  const chuck = put(new THREE.Group(), TEND.table.x, 0.62, tz, E.G);        // 회전 척 (세로축으로 표현)
+  put(cyl(0.42, 0.46, 0.3, MAT.dark, 32), 0, 0.12, 0, chuck);
+  const face = put(cyl(0.4, 0.4, 0.05, MAT.steel, 32), 0, 0.3, 0, chuck);
+  for (let k = 0; k < 3; k++) { const a = (k / 3) * Math.PI * 2; put(box(0.1, 0.08, 0.16, MAT.yellow), Math.cos(a) * 0.3, 0.06, Math.sin(a) * 0.3, face).rotation.y = -a; }
+  const turret = put(new THREE.Group(), TEND.table.x + 0.9, 1.25, tz, E.G);   // 공구 터렛
+  const tdisc = put(cyl(0.32, 0.32, 0.18, MAT.dark, 12), 0, 0, 0, turret); tdisc.rotation.z = Math.PI / 2;
+  for (let k = 0; k < 12; k++) { const a = (k / 12) * Math.PI * 2; put(box(0.06, 0.06, 0.14, MAT.steel), -0.05, Math.cos(a) * 0.3, Math.sin(a) * 0.3, tdisc); }
+  put(box(0.5, 0.5, 0.6, MAT.dark), TEND.table.x - 1.0, 1.0, tz, E.G);      // 주축대
+  put(box(0.18, 0.18, 0.18, std(0x2b6cb0)), TEND.table.x + 0.55, 0.62, tz + 0.45, E.G);   // 절삭력 동력계 (Kistler)
+  const coolant = put(makeSparks(0x9fe8ff, 40, 0.035), 0, 0, 0, E.G);
+  const chips = put(makeSparks(0xb8bec6, 30, 0.03), 0, 0, 0, E.G);
+  put(box(0.5, 0.4, 2.0, MAT.dark), -1.85, 0.2, 0, E.G);
+  const bin = put(box(0.6, 0.55, 0.6, std(0x5a6470, { metalness: 0.4 })), -1.9, 0.28, 1.25, E.G);
+  put(box(0.55, 0.06, 0.55, std(0xc9ced4, { metalness: 0.7, roughness: 0.4 })), 0, 0.3, 0, bin);
+  const panel = put(box(0.55, 0.8, 0.2, MAT.dark), 1.35, 1.5, E.d / 2 + 0.12, E.G);
+  const screen = emis(0x58c4ff, 1.2); put(box(0.42, 0.3, 0.02, screen, false), 0, 0.15, 0.11, panel);
+  const edge = put(box(0.28, 0.18, 0.12, std(0x111418)), -1.3, 2.25, E.d / 2 + 0.07, E.G);
+  const edgeLed = emis(0x3ddc84, 2); put(box(0.2, 0.03, 0.01, edgeLed, false), 0, 0.03, 0.065, edge);
+  return { mc: E, door: E.door, chuck, turret, coolant, chips, screen, edgeLed, tz };
+}
+// 사선가공·디버링셀: AMR 위 소재를 그 자리에서 — 문형 사선 드릴 헤드(기울어진 스핀들) + 양쪽 협동로봇 디버링 + 출구 고압 세척·에어 블로 터널
+function buildDeburr(g, st) {
+  for (const z of [-1.15, 1.15]) put(box(0.14, 2.7, 0.14, MAT.steel), -0.35, 1.45, z, g);
+  put(box(0.22, 0.22, 2.5, MAT.steel), -0.35, 2.8, 0, g);
+  const head = put(new THREE.Group(), -0.35, 2.3, 0, g);
+  put(box(0.3, 0.35, 0.3, MAT.accent), 0, 0.15, 0, head);
+  put(box(0.08, 1.2, 0.08, MAT.steel), 0, 0.85, 0, head);
+  const spin = put(new THREE.Group(), 0, -0.1, 0, head); spin.rotation.z = 0.5;   // 사선 유로홀: 스핀들을 기울여 드릴
+  const bit = put(cyl(0.03, 0.05, 0.5, MAT.steel, 10), 0, -0.25, 0, spin);
+  const wash = put(new THREE.Group(), 1.55, 0, 0, g);                        // 세척·건조 터널 (출구)
+  for (const z of [-0.9, 0.9]) put(box(0.12, 2.0, 0.12, MAT.white), 0, 1.0, z, wash);
+  put(box(0.7, 0.25, 1.95, MAT.white), 0, 2.0, 0, wash);
+  const nozzles = [];
+  for (const z of [-0.5, 0, 0.5]) nozzles.push(put(cyl(0.03, 0.05, 0.16, MAT.steel, 8), 0, 1.82, z, wash));
+  const spray = put(makeSparks(0x9fe8ff, 60, 0.04), 0, 0, 0, g);
+  const curtain = put(box(0.02, 1.2, 1.7, MAT.booth, false), 0.32, 1.25, 0, wash);
+  const screen = emis(0x3ddc84, 1.2);
+  const ctl = put(box(0.5, 0.7, 0.35, MAT.dark), 1.95, 0.4, 1.6, g); put(box(0.36, 0.25, 0.02, screen, false), 0, 0.15, 0.18, ctl);
+  const feeders = [];
+  for (const z of [-1.0, 1.0]) {   // 디버링 툴 거치대 (양쪽 로봇 바깥)
+    const f = put(box(0.45, 0.7, 0.4, MAT.white), -1.95, 0.35, z, g); feeders.push(f);
+    for (let k = 0; k < 3; k++) put(cyl(0.025, 0.025, 0.18, MAT.steel, 8), -0.12 + k * 0.12, 0.44, 0, f);
+  }
+  return { head, bit, spray, nozzles, curtain, screen, feeders };
+}
+// 소재 식별·3D측정셀: 입구 게이트(소재 ID 판독 · 구조광 3D 스캐너 · 판별 표시판) + 스캔 결과 모니터, 그 뒤 AMMR이 클램핑
+function buildMatId(g, st, sim) {
+  const gate = buildGate(g, -1.75, 0x37e8ff);
+  const scanners = [];
+  for (const z of [-0.85, 0.85]) {   // 구조광 3D 스캐너 (게이트 양쪽 위, 소재를 향해 기울임)
+    const sc = put(new THREE.Group(), -1.75, 2.1, z, g); sc.rotation.x = z > 0 ? -0.6 : 0.6;
+    put(box(0.36, 0.14, 0.18, MAT.dark), 0, 0, 0, sc);
+    put(box(0.08, 0.05, 0.02, emis(0x37e8ff, 2), false), -0.1, 0, z > 0 ? -0.1 : 0.1, sc);
+    put(box(0.08, 0.05, 0.02, emis(0x37e8ff, 2), false), 0.1, 0, z > 0 ? -0.1 : 0.1, sc);
+    scanners.push(sc);
+  }
+  // 점군 결과 모니터 (출구 쪽): 소재 편차 히트맵
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 160;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const mon = put(new THREE.Group(), 1.9, 0, 1.55, g);
+  put(box(0.06, 1.3, 0.06, MAT.dark), 0, 0.65, 0, mon);
+  const scr = put(new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.5), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false })), 0, 1.5, 0.04, mon);
+  put(box(0.86, 0.56, 0.04, MAT.dark), 0, 1.5, 0.0, mon);
+  // 제품별 지그 팔레트 대기대 (+z 유압블록 · −z 리어커버)
+  [['hblock', 1.15], ['rcover', -1.15]].forEach(([k, z]) => {
+    const tag = put(box(0.5, 0.22, 0.04, std(ZONE_COLOR[k], { emissive: ZONE_COLOR[k], emissiveIntensity: 0.6 })), 1.85, 0.75, z * 1.35, g);
+    put(box(0.04, 0.5, 0.04, MAT.dark), 0, -0.35, 0, tag);
+  });
+  return { ...gate, scanners, heat: { cv, tex, id: null } };
+}
+// 초정밀 측정·리워크셀: 입구 판정 게이트 · AMR이 문형 CMM 아래로 들어가 측정(문형 측정기 내부로 AMR 진입) · 출구 쪽 리워크 스핀들
+function buildCMM(g, st, sim) {
+  const gate = buildGate(g, -1.75, 0x58c4ff);
+  const granite = std(0x3b3f45, { roughness: 0.35, metalness: 0.1 });
+  for (const z of [-1.25, 1.25]) put(box(1.6, 0.25, 0.3, granite), 0.15, 0.125, z, g);   // 그라나이트 레일
+  const bridge = put(new THREE.Group(), 0.15, 0, 0, g);                      // 문형 브리지 (X 이동)
+  for (const z of [-1.2, 1.2]) put(box(0.18, 2.3, 0.22, MAT.white), 0, 1.4, z, bridge);
+  put(box(0.24, 0.26, 2.6, MAT.white), 0, 2.55, 0, bridge);
+  const car = put(new THREE.Group(), 0, 2.55, 0, bridge);                     // Y 캐리지
+  put(box(0.3, 0.34, 0.3, MAT.accent), 0, 0, 0, car);
+  const quill = put(new THREE.Group(), 0, 0, 0, car);                         // Z 퀼 + 프로브
+  put(box(0.1, 1.1, 0.1, MAT.steel), 0, -0.55, 0, quill);
+  const tipMat = emis(0xff4d6d, 1.5);
+  put(mesh(new THREE.SphereGeometry(0.03, 12, 8), tipMat), 0, -1.12, 0, quill);
+  put(cyl(0.008, 0.008, 0.1, MAT.dark, 6), 0, -1.06, 0, quill);
+  // 리워크 스테이션 (출구 쪽 바깥, 소형 스핀들 + 버 제거 브러시)
+  const rw = put(new THREE.Group(), 1.95, 0, -1.55, g);
+  put(box(0.7, 0.9, 0.6, MAT.dark), 0, 0.45, 0, rw);
+  const rwSpin = put(cyl(0.06, 0.08, 0.3, MAT.steel, 12), 0, 1.15, 0, rw);
+  const rwLamp = emis(0xf5b82e, 0.3); put(box(0.5, 0.05, 0.05, rwLamp, false), 0, 0.95, 0.31, rw);
+  // 측정 결과 모니터
+  const screen = emis(0x3ddc84, 1.2);
+  const ctl = put(box(0.6, 0.45, 0.06, MAT.dark), 1.95, 1.6, 1.5, g); put(box(0.52, 0.36, 0.02, screen, false), 0, 0, 0.04, ctl);
+  put(box(0.06, 1.35, 0.06, MAT.dark), 1.95, 0.68, 1.5, g);
+  return { ...gate, bridge, car, quill, tipMat, rwSpin, rwLamp, screen };
+}
+
 // ── 공정 설비 (유형별) ─────────────────
 function buildWeld(g) {
   const fence = new THREE.Group();
@@ -1064,7 +1212,7 @@ function buildAssembly(g, st, sim) {
     put(cyl(0.2, 0.2, 0.9, MAT.dark), 0, -0.6, 0, bowl);
     return { bowl };
   }
-  // 정밀조립Zone: 양쪽 로봇 바깥 끝에 부품 랙(2단 빈), 오른쪽 끝에 볼 피더 (피지컬AI VLA 셀은 로봇별 부품 선반으로 대체)
+  // 적응가공Zone: 양쪽 로봇 바깥 끝에 부품 랙(2단 빈), 오른쪽 끝에 볼 피더 (피지컬AI VLA 셀은 로봇별 부품 선반으로 대체)
   const feeders = [], names = cellParts(st);
   for (const z of [-1.0, 1.0]) {
     const r = put(new THREE.Group(), -1.95, 0.06, z, g); feeders.push(r);
@@ -1125,19 +1273,39 @@ function buildGate(g, x, scanColor) {
   return { ringMat, scan, gateX: x, gateSign: { cv, tex, id: null } };
 }
 function drawGateSign(gs, st) {
-  const d = st.gate, key = d ? `${d.id}:${st.state === 'DOWN'}` : 'none';
+  const d = st.gate, key = d ? `${d.id}:${d.text}:${st.state === 'DOWN'}` : 'none';
   if (gs.id === key) return; gs.id = key;
   const c = gs.cv.getContext('2d'), col = d?.product ? '#' + ZONE_COLOR[d.product].toString(16).padStart(6, '0') : '#37e8ff';
   c.fillStyle = '#071019'; c.fillRect(0, 0, 512, 128);
-  c.fillStyle = col; c.fillRect(0, 0, 14, 128);
+  c.fillStyle = d?.result === 'rework' ? '#f5b82e' : d?.result === 'scrap' ? '#ff4d4d' : col; c.fillRect(0, 0, 14, 128);
   c.font = 'bold 30px "Apple SD Gothic Neo", "Noto Sans KR", sans-serif'; c.fillStyle = '#9fb4c8';
-  c.fillText(st.def.type === 'pack' ? '포장 게이트 · 판별 결과' : '분류 게이트 · 판별 결과', 32, 42);
+  c.fillText(st.def.type === 'cmm' ? 'CMM 판정 게이트 · 측정 결과' : st.def.type === 'matid' ? '소재 식별 게이트 · 3D 스캔' : st.def.type === 'pack' ? '포장 게이트 · 판별 결과' : '분류 게이트 · 판별 결과', 32, 42);
   c.font = 'bold 40px "Apple SD Gothic Neo", "Noto Sans KR", sans-serif'; c.fillStyle = d?.product ? col : '#e6edf3';
   const t = d ? d.text : '대기 중'; let fs = 40;
   while (c.measureText(t).width > 460 && fs > 22) { fs -= 2; c.font = `bold ${fs}px "Apple SD Gothic Neo", "Noto Sans KR", sans-serif`; }
   c.fillText(t, 32, 98);
   gs.tex.needsUpdate = true;
 }
+
+// 소재 3D 스캔 결과 모니터: 가공여유 편차 히트맵 (스캔이 없는 레거시는 'ID 확인만')
+function drawHeatmap(hm, st) {
+  const it = st.item, key = it ? `${it.id}:${it.stock}` : 'none';
+  if (hm.id === key) return; hm.id = key;
+  const c = hm.cv.getContext('2d');
+  c.fillStyle = '#071019'; c.fillRect(0, 0, 256, 160);
+  c.font = 'bold 18px "Apple SD Gothic Neo", sans-serif'; c.fillStyle = '#9fb4c8'; c.fillText('프리폼 3D 스캔 · 가공여유', 10, 24);
+  if (!it || it.stock == null) { c.fillStyle = '#e6edf3'; c.fillText('대기 중', 10, 90); hm.tex.needsUpdate = true; return; }
+  const rnd = mulberry(it.id * 7919);
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 14; x++) {
+    const v = Math.max(-1, Math.min(1, it.stock / 0.4 + (rnd() - 0.5) * 0.7));
+    c.fillStyle = v > 0 ? `rgb(${200 + v * 55},${150 - v * 80},${70 - v * 40})` : `rgb(${70 + v * 30},${150 + v * 30},${210 - v * 40})`;
+    c.fillRect(10 + x * 17, 36 + y * 12, 15, 10);
+  }
+  c.fillStyle = '#e6edf3'; c.font = 'bold 17px "Apple SD Gothic Neo", sans-serif';
+  c.fillText(`#${it.id} 편차 ${it.stock > 0 ? '+' : ''}${it.stock.toFixed(2)}mm → 경로 보정`, 10, 150);
+  hm.tex.needsUpdate = true;
+}
+function mulberry(a) { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
 // 부품압입셀: 양쪽 협동로봇이 힘제어로 압입 — 클립 피더 + 압입 툴 거치대 + 하중-변위 모니터
 function buildPressFit(g) {
@@ -1297,7 +1465,7 @@ function buildPack(g, st, sim) {
   return {};
 }
 
-// ── 자재투입존 (정밀조립Zone · Blender): 한쪽(+z) 유압블록 빗살 거치대, 반대쪽(−z) 리어커버 3단 랙에 실물 모델을 정렬 보관
+// ── 자재투입존 (적응가공Zone · Blender): 한쪽(+z) 유압블록 빗살 거치대, 반대쪽(−z) 리어커버 3단 랙에 실물 모델을 정렬 보관
 // 수십 개를 그리므로 모델을 재질별로 합쳐(bake) InstancedMesh로 그린다 — 보이는 개수(count)가 재고 수량
 function bakeAsset(root, skip) {
   root.updateMatrixWorld(true);
@@ -1314,8 +1482,8 @@ function bakeAsset(root, skip) {
   return [...byMat.values()].map(({ material, gs }) => ({ material, geometry: mergeGeometries(gs) }));
 }
 const BAKED = new Map();   // 자산별 재질 합친 지오메트리 (자산을 다시 불러오면 새로 만든다)
-function bakedOf(name, skip) {
-  const src = RENDER.assets[name]; if (!src) return null;
+function bakedOf(name, skip, asset = name) {
+  const src = RENDER.assets[asset]; if (!src) return null;
   const hit = BAKED.get(name); if (hit?.src === src) return hit.baked;
   const baked = bakeAsset(src.clone(true), skip); BAKED.set(name, { src, baked }); return baked;
 }
@@ -1342,35 +1510,29 @@ function buildSourceZone(g) {
   const lift = put(new THREE.Group(), 0, 0, 0, car);
   put(box(0.08, 2.7, 0.08, MAT.steel), 0, -0.25, 0, lift);   // Z축 봉 (−1.6 ~ +1.1): 가장 낮게 내려가도 캐리지 슬리브에 물려 있다
   put(box(0.5, 0.08, 0.4, MAT.dark), 0, -1.6, 0, lift);
-  // 리어커버 적재 (−z): 바닥 팔레트 위에 받침대째 3열(x) × 3줄(z)로 놓고, 층 사이에 받침목을 깔아 3단으로 쌓는다 (선반 없음 — 갠트리가 위에서 집는다)
-  const EA_H = 0.57, LV = [0.12, 0.72, 1.32];
-  put(box(3.6, 0.12, 1.6, MAT.pallet), 0, 0.06, -2.15, g);
-  const boards = LV.slice(1).map((y) => { const b = put(new THREE.Group(), 0, 0, 0, g); for (const z of [-0.52, 0, 0.52]) put(box(3.5, 0.03, 0.12, MAT.pallet), 0, y - 0.015, -2.15 + z, b); return b; });
-  const eaSlots = [];
-  LV.forEach((y) => { for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) eaSlots.push(new THREE.Vector3(-1.15 + c * 1.15, y, -2.15 - 0.52 + r * 0.52)); });
-  const eaM = eaSlots.slice(0, SLOTS).map((v) => new THREE.Matrix4().makeTranslation(v.x, v.y, v.z));
-  const ea = instancedStock(bakedOf('rcover', (o) => o.name === 'FastenBolts'), eaM); g.add(ea.group);
-  // 유압블록 빗살 거치대 (+z): 2열(x) × 10장, 세워서 앞면이 바깥(+z)을 보게 — 안쪽부터 채운다
-  const dr = put(new THREE.Group(), 0, 0, 2.15, g);
-  put(box(3.7, 0.08, 1.6, MAT.steel), 0, 0.04, 0, dr);
-  for (const cx of [-0.95, 0.95]) {
-    for (const x of [-0.36, 0.36]) put(box(0.05, 0.06, 1.5, MAT.dark), cx + x, 0.11, 0, dr);
-    for (let k = 0; k <= 10; k++) for (const x of [-0.44, 0.44]) put(box(0.02, 0.5, 0.02, MAT.accent), cx + x, 0.33, -0.725 + k * 0.145, dr);   // 빗살 칸막이
-    for (const x of [-0.44, 0.44]) put(box(0.03, 0.03, 1.5, MAT.accent), cx + x, 0.6, 0, dr);
-  }
-  const dtSlots = [];
-  for (let k = 0; k < 10; k++) for (const cx of [-0.95, 0.95]) dtSlots.push(new THREE.Vector3(cx, 0.14, 2.15 - 0.65 + k * 0.145));
-  const dtM = dtSlots.map((v) => new THREE.Matrix4().makeTranslation(v.x, v.y, v.z));
-  const dt = instancedStock(bakedOf('hblock'), dtM); g.add(dt.group);
-  // 갠트리가 들고 가는 모델 (제품별): 중심이 기존 박스 자리(−1.85)
-  const heldEA = put(new THREE.Group(), 0, -1.85 - EA_H / 2, 0, lift); const eh = cloneAsset('rcover').root; eh.getObjectByName('FastenBolts').visible = false; heldEA.add(eh);
-  const heldDT = put(new THREE.Group(), 0, -1.85 - 0.3, 0, lift); heldDT.add(cloneAsset('hblock').root);
+  // 소재 지그 팔레트 적재: 제품마다 바닥 팔레트 위 3열(x) × 2줄(z)로 놓고, 층 사이 받침목을 깔아 3단 — 갠트리가 위에서 집는다
+  // (+z 유압블록 압출 소재 4개입 · −z 리어커버 다이캐스팅 소재) — 소재 상태(Raw)만 보이도록 가공 노드는 빼고 굽는다
+  const LV = [0.12, 0.5, 0.88], rawOnly = (o) => o.name === 'Machined' || o.name === 'Finish';
+  const side = (kind, zc) => {
+    put(box(3.6, 0.12, 1.6, MAT.pallet), 0, 0.06, zc, g);
+    const boards = LV.slice(1).map((y) => { const b = put(new THREE.Group(), 0, 0, 0, g); for (const z of [-0.36, 0.36]) put(box(3.5, 0.03, 0.12, MAT.pallet), 0, y - 0.015, zc + z, b); return b; });
+    const slots = [];
+    LV.forEach((y) => { for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) slots.push(new THREE.Vector3(-1.15 + c * 1.15, y, zc - 0.36 + r * 0.72)); });
+    const sl = slots.slice(0, SLOTS), mats = sl.map((v) => new THREE.Matrix4().makeTranslation(v.x, v.y, v.z));
+    const inst = instancedStock(bakedOf(kind, rawOnly), mats); g.add(inst.group);
+    return { ...inst, slots: sl, h: PRODUCT_H[kind], boards, per: 6 };
+  };
+  const ea = side('rcover', -2.15), dt = side('hblock', 2.15);
+  // 갠트리가 들고 가는 소재 (제품별): 바닥 원점 모델을 들린 박스 중심(−1.85)에 맞춤
+  const mk = (kind) => { const m = makeProductModel(kind); styleProduct(m, {}); return m; };
+  const heldEA = put(new THREE.Group(), 0, -1.85 - PRODUCT_H.rcover / 2, 0, lift); heldEA.add(mk('rcover'));
+  const heldDT = put(new THREE.Group(), 0, -1.85 - PRODUCT_H.hblock / 2, 0, lift); heldDT.add(mk('hblock'));
   const held = put(new THREE.Group(), 0, 0, 0, lift); held.add(heldEA, heldDT);
-  return { auto, bridge, car, lift, held, heldEA, heldDT, stack: [], zoneStock: { ea: { ...ea, slots: eaSlots.slice(0, SLOTS), h: EA_H, boards }, dt: { ...dt, slots: dtSlots, h: 0.6 } } };
+  return { auto, bridge, car, lift, held, heldEA, heldDT, stack: [], zoneStock: { ea, dt } };
 }
 
 function buildSource(g, st, sim) {
-  if (sim?.zone && blenderOn() && RENDER.assets.rcover && RENDER.assets.hblock) return buildSourceZone(g);
+  if (sim?.zone && blenderOn() && RENDER.assets.rcover && RENDER.assets.hblock) return buildSourceZone(g);   // Blender 제품 모델로 소재 적재
   const auto = new THREE.Group(); g.add(auto);
   for (const x of [-1.8, 1.8]) for (const z of [-1.5, 3.0]) put(box(0.12, 3.0, 0.12, MAT.yellow), x, 1.5, z, auto);
   put(box(3.8, 0.14, 0.14, MAT.yellow), 0, 3.0, -1.5, auto);
@@ -1405,16 +1567,21 @@ function buildSink(g, st, sim) {
       const pad = put(new THREE.Mesh(new THREE.PlaneGeometry(3.4, 2.8), new THREE.MeshStandardMaterial({ color: ZONE_COLOR[k], transparent: true, opacity: 0.35, depthWrite: false })), 0, 0.02, sd * 3.0, g);
       pad.rotation.x = -Math.PI / 2;
       put(box(3.0, 0.12, 2.4, MAT.pallet), 0, 0.12, sd * 3.0, g);
-      const mat = k === 'hblock' ? MAT.carton : MAT.crate;
       stacks[k] = [];
+      const H = PRODUCT_H[k], baked = blenderOn() && RENDER.assets[k] ? bakedOf(`${k}#done`, (o) => o.name === "Raw", k) : null;
       for (let i = 0; i < FG_ZONE_CAP; i++) {
         const lx = i % 4, lz = Math.floor(i / 4) % 3, ly = Math.floor(i / 12);
-        stacks[k].push(put(box(0.66, 0.5, 0.66, mat), -1.05 + lx * 0.7, 0.43 + ly * 0.52, sd * (2.3 + lz * 0.7), g));
+        // 합격품: 가공 완료 상태의 지그 팔레트 (Blender면 재질별로 합친 지오메트리를 나눠 써서 가볍게)
+        let o;
+        if (baked) { o = new THREE.Group(); for (const b of baked) o.add(mesh(b.geometry, b.material)); }
+        else { o = makeProductModel(k); styleProduct(o, { machined: true, deburred: true, turned: true }); }
+        stacks[k].push(put(o, -1.05 + lx * 0.7, 0.18 + ly * (H + 0.05), sd * (2.3 + lz * 0.7), g));
       }
       const arm = makeArm(k === 'hblock' ? MAT.orange : std(0x7a5cc8, { roughness: 0.45, metalness: 0.3 }), PALLET_ARM.s);
       put(arm.root, 0, 0.06, sd * PALLET_ARM.z, auto);
       put(cyl(0.62, 0.66, 0.06, std(ZONE_COLOR[k], { roughness: 0.5 })), 0, 0.03, sd * PALLET_ARM.z, auto);   // 제품 색 받침
-      const held = put(box(0.66, 0.5, 0.66, mat), 0, -0.25 - 0.02, 0, arm.tip); held.visible = false;       // 진공 그리퍼에 붙은 박스
+      const held = put(makeProductModel(k), 0, -PRODUCT_H[k] - 0.02, 0, arm.tip); held.visible = false;       // 흡착 그리퍼에 붙은 합격품 팔레트
+      styleProduct(held, { machined: true, deburred: true, turned: true });
       arms[k] = { arm, sd, held, queue: 0, cyc: null, seen: null };
     });
     return { zoneStacks: stacks, arms, auto };
@@ -1433,6 +1600,7 @@ const BUILDERS = {
   cnc: buildCNC, press: buildPress, laser: buildLaser, weld: buildWeld, assembly: buildAssembly,
   paint: buildPaint, vision: buildVision, test: buildTest, pack: buildPack, source: buildSource, sink: buildSink,
   sort: buildSort, pressfit: buildPressFit, screw: buildScrew, fasten: buildFasten,
+  matid: buildMatId, mill5: buildMill5, turn: buildTurn, deburr: buildDeburr, cmm: buildCMM,
 };
 
 // ── 메인 뷰 ─────────────────────────────
@@ -1839,20 +2007,17 @@ export class FactoryView {
       put(box(2.0, 0.12, 1.6, MAT.pallet), x, y + 0.11, 0, G);
       if (c.kind === 'raw') {
         let lo, hi;
-        if (models && c.p === 'hblock') {   // 유압블록: 2장 × 3줄씩 세워 꽂음 (앞면 = 동쪽) — 앞 3줄 lo · 뒤 3줄 hi
-          const rows = (zs) => zs.flatMap((z) => [-0.44, 0.44].map((dx) => new THREE.Matrix4().makeTranslation(x + dx, y + 0.17, z)));
-          lo = one('hblock', rows([0.55, 0.36, 0.17])); hi = one('hblock', rows([-0.02, -0.21, -0.4])); G.add(lo, hi);
-        } else if (models) {                  // 리어커버: 축을 깊이 방향으로 3개씩 2단 (아래 lo · 위 hi)
-          const row = (yy) => [-0.64, 0, 0.64].map((dx) => new THREE.Matrix4().makeTranslation(x + dx, yy, 0).multiply(new THREE.Matrix4().makeRotationY(Math.PI / 2)));
-          const skip = (o) => o.name === 'FastenBolts';
-          lo = one('rcover', row(y + 0.17), skip); hi = one('rcover', row(y + 0.76), skip); G.add(lo, hi);
+        if (models) {   // 소재 지그 팔레트 2 × 2개씩 2단 (아래 lo · 위 hi) — 소재 상태만
+          const skip = (o) => o.name === 'Machined' || o.name === 'Finish', H = PRODUCT_H[c.p];
+          const lay = (yy) => [[-0.44, -0.36], [0.44, -0.36], [-0.44, 0.36], [0.44, 0.36]].map(([dx, dz]) => new THREE.Matrix4().makeTranslation(x + dx, yy, dz));
+          lo = one(c.p, lay(y + 0.17), skip); hi = one(c.p, lay(y + 0.2 + H), skip); G.add(lo, hi);
         } else {
           const mat = c.p === 'rcover' ? MAT.crate : MAT.raw;
           lo = put(box(1.8, 0.42, 1.4, mat), x, y + 0.38, 0, G); hi = put(box(1.8, 0.42, 1.4, mat), x, y + 0.82, 0, G);
         }
         this.whRawSlots.push({ lo, hi, y });
       } else {
-        const bins = [], tote = std(c.p === 'rcover' ? 0x6f5bd6 : 0xe08a2a);   // 제품별 부품 토트 (유압블록 주황 · 리어커버 보라)
+        const bins = [], tote = std(c.p === 'rcover' ? 0x6f5bd6 : 0xe08a2a);   // 제품별 클램프·공구 소모품 토트 (유압블록 주황 · 리어커버 보라)
         for (let k = 0; k < 6; k++) bins.push(put(box(0.56, 0.36, 0.62, tote), x - 0.62 + (k % 3) * 0.62, y + 0.37, -0.34 + Math.floor(k / 3) * 0.68, G));
         fillBins(bins, cellParts({ id: c.p === 'rcover' ? 'RC_MILL' : 'HB_MILL' }));
         this.whPartSlots.push({ bins, y });
@@ -2213,7 +2378,7 @@ export class FactoryView {
     this.root.add(g); this.convGroups.push(g);
   }
 
-  // 정밀조립Zone 바닥 표시: Zone 경계선, 셀별 패드(공동·공용/유압블록/리어커버 색), Zone 이름
+  // 적응가공Zone 바닥 표시: Zone 경계선, 셀별 패드(공동·공용/유압블록/리어커버 색), Zone 이름
   buildZoneDeco(sim) {
     const g = (this.zoneDeco = new THREE.Group()); this.root.add(g);
     const flat = (w, d, mat, x, z, y = 0.008) => { const m = put(new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat), x, y, z, g); m.rotation.x = -Math.PI / 2; m.receiveShadow = true; return m; };
@@ -2235,8 +2400,8 @@ export class FactoryView {
     };
     const mix = ZONE_MIXES[sim.line.mix] ?? ZONE_MIXES['1:1'];
     decal(`${ZONE_NAME} · 혼류 ${mix.label}`, 'rgba(55,232,255,0.9)', 16, -20.5, -5.6);
-    decal(`▶ 유압블록 라인 (${ZONE_PRODUCTS.hblock.customer})`, 'rgba(245,189,92,0.95)', 12, 1, 1.6, 56);
-    decal(`▶ 리어커버 라인 (${ZONE_PRODUCTS.rcover.customer})`, 'rgba(184,155,255,0.95)', 12, 1, -1.6, 56);
+    decal(`▶ 유압블록 라인 (${ZONE_PRODUCTS.hblock.customer})`, 'rgba(245,189,92,0.95)', 8, 1, 1.3, 56);   // 두 가공기 사이 바닥
+    decal(`▶ 리어커버 라인 (${ZONE_PRODUCTS.rcover.customer})`, 'rgba(184,155,255,0.95)', 8, 1, -1.3, 56);
     if (!sim.useAMR) return;
     // AMR 전용 동선: 대기열, 복귀 전용로(적재장 → 앞쪽 → 대기열), 출동 차로(대기열 → 투입 스테이션)
     const p0 = amrPark(0), pN = amrPark(ZONE_AMR.count - 1);
@@ -2285,8 +2450,8 @@ export class FactoryView {
       put(cyl(0.3, 0.3, 0.05, MAT.housing, 18), 0, 0, 0, bolts).rotation.z = Math.PI / 2;
       for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; put(cyl(0.035, 0.035, 0.06, MAT.bolt, 6), 0.03, Math.cos(a) * 0.22, Math.sin(a) * 0.22, bolts).rotation.z = Math.PI / 2; }
       const amr = makeCarrierAMR(); amr.position.y = -BELT_Y; amr.rotation.y = Math.PI / 2; g.add(amr);
-      const dtImg = makeDoortrimPlate(); g.add(dtImg);   // 유압블록 실물 이미지 판 (부품분류셀부터)
-      const eaImg = makeEaxlePlate(); g.add(eaImg);      // 리어커버: Blender 입체 모델 (불러오지 못하면 실물 이미지 판) — 부품분류셀부터
+      const dtImg = makeProductModel('hblock'); g.add(dtImg);   // 유압블록: 지그 팔레트 위 4개 (Blender 모델 · 상태별 노드)
+      const eaImg = makeProductModel('rcover'); g.add(eaImg);   // 리어커버: 지그 팔레트 위 다이캐스팅 1개
       g.userData = { base, part, carton, tag, panel, arm, clips, housing, bolts, amr, dtImg, eaImg };
       this.dyn.add(g);
     }
@@ -2294,6 +2459,7 @@ export class FactoryView {
     return g;
   }
   styleItem(g, item, inSort = false) {
+    g.userData.dtImg.position.set(0, 0, 0); g.userData.eaImg.position.set(0, 0, 0);
     const { base, part, carton, tag, panel, arm, clips, housing, bolts, amr, dtImg, eaImg } = g.userData;
     amr.visible = !!item.carrier;
     const dt = item.product === 'hblock', ea = item.product === 'rcover';
@@ -2303,6 +2469,17 @@ export class FactoryView {
     if (item.scrap) {   // 불량품을 빼낸 빈 AMR
       panel.visible = arm.visible = clips.visible = housing.visible = bolts.visible = false;
       part.visible = carton.visible = base.visible = tag.visible = false;
+      return;
+    }
+    if (item.product) {
+      // 적응가공 제품: 투입부터 지그 팔레트째 실물 모델 — 소재 → 가공면·홀 → 사선홀·디버링 / 보어 선삭 → 측정 판정 라벨
+      panel.visible = arm.visible = clips.visible = housing.visible = bolts.visible = false;
+      part.visible = carton.visible = base.visible = false;
+      const M = item.product === 'rcover' ? eaImg : dtImg;
+      M.visible = true; styleProduct(M, item);
+      M.position.set(0, 0, 0);   // 머신텐딩 중에는 syncItems가 로봇 손·가공기 지그로 옮긴다
+      tag.visible = !!item.measured || !!item.packed; tag.position.y = M.userData.tagY;
+      tag.material = item.reworked ? TAG_RW : TAG_OK;
       return;
     }
     if (item.product && item.packed) {
@@ -2368,8 +2545,24 @@ export class FactoryView {
       let y = BELT_Y;
       if (st.state === 'BUSY' && (st.type === 'cnc' || st.type === 'press')) y += Math.sin(this.time * 60) * 0.006;
       place(st.item, q.x, y, q.z, 0, st.type === 'sort');
+      if (TEND_TYPES.has(st.type) && !st.item.scrap && this.sim.mode.key !== 'traditional') this.tendItem(st);
     }
     for (const [id, g] of this.itemMeshes) if (!seen.has(id)) { g.visible = false; this.itemPool.push(g); this.itemMeshes.delete(id); }
+  }
+
+  // 머신텐딩: 진행률에 따라 소재(지그 팔레트)를 AMR 위 → 로봇 손 → 가공기 지그 → 로봇 손 → AMR 위로
+  tendItem(st) {
+    const g = this.itemMeshes.get(st.item.id), sv = this.stationViews.find((v) => v.st === st); if (!g || !sv) return;
+    const M = st.item.product === 'rcover' ? g.userData.eaImg : g.userData.dtImg, P = TEND_PH, p = st.progress ?? 0;
+    const r = sv.parts.robots?.[0];
+    const inHand = (p >= P.lift && p < P.load) || (p >= P.grab && p < P.place);
+    const inMc = p >= P.load && p < P.grab;
+    const w = new THREE.Vector3();
+    if (inHand && r) { r.tip.getWorldPosition(w); w.y -= PRODUCT_H[st.item.product] + 0.02; }
+    else if (inMc) { const q = toWorld(st.def, TEND.table.x, TEND.table.z); w.set(q.x, TEND.table.y, q.z); }
+    else return;
+    M.position.set(w.x - g.position.x, w.y - g.position.y, w.z - g.position.z);
+    if (inMc && st.type === 'turn' && st.state === 'BUSY' && p > P.cut0 && p < P.cut1) M.rotation.y = this.time * 9; else M.rotation.y = 0;
   }
 
   // ── 이벤트 연출 ─────────────────────────────
@@ -2652,6 +2845,7 @@ export class FactoryView {
     if (parts.robots && !frozen) parts.robots.forEach((r, i) => {
       // 게이트 결정: 주 작업 로봇은 작업하고, 보조 로봇은 작업물을 잡아 고정한 자세로 천천히 따라간다
       const lead = this.sim.isLead(st, i);
+      if (r.tend) return this.animTend(r, st, busy, p, i);
       if (r.vla) return this.animVLA(r, st, busy && lead, p, i);
       r.anim(busy && lead, t + r.phase, p);
       if (r.kind === 'ammr' && st.vla) this.animAMMRVLA(r, st, busy, t, i, lead);
@@ -2759,6 +2953,68 @@ export class FactoryView {
         parts.screen.emissive.setHex(st.state === 'DOWN' ? 0xff3030 : down && Math.sin(t * 10) > 0 ? 0xf5b82e : 0x3ddc84);
         break;
       }
+      case 'mill5':
+      case 'turn': {
+        // 문: 로딩·언로딩 구간에 열림 / 가공 구간: 스핀들(척) 회전 · 절삭유 · 칩 · 엣지 진단 LED(채터 보정 중 주황)
+        const P = TEND_PH, legacy = this.sim.mode.key === 'traditional';
+        const open = !!st.item && !st.item.scrap && ((p > P.pick && p < P.cut0) || (p > P.cut1 && p < P.back + 0.02)) || (!st.item && !legacy) ? 1 : 0;
+        sv.doorK = (sv.doorK ?? 0) + (open - (sv.doorK ?? 0)) * Math.min(1, rdt * 4);
+        parts.door.position.x = sv.doorK * 1.25;
+        const cutting = busy && p > P.cut0 && p < P.cut1;
+        const ad = st.ad, chat = ad && ad.ov < 1;
+        if (st.type === 'mill5') {
+          if (cutting) parts.spindle.rotation.y += dts * 50;
+          parts.head.position.y += ((cutting ? 1.85 + Math.sin(t * 3) * 0.05 : 2.05) - parts.head.position.y) * Math.min(1, rdt * 5);
+          parts.head.position.x = TEND.table.x + (cutting ? Math.sin(p * Math.PI * 9) * 0.2 : 0);
+          parts.cradle.rotation.x = cutting ? Math.sin(p * Math.PI * 4) * 0.35 : parts.cradle.rotation.x * 0.9;   // A축 기울기 (5축 동시)
+          parts.table.rotation.y += cutting ? dts * 0.8 : 0;
+          if (chat && cutting) parts.head.position.z = parts.tz + Math.sin(t * 90) * 0.012; else parts.head.position.z = parts.tz;   // 채터 떨림
+        } else {
+          if (cutting) parts.chuck.rotation.y += dts * 9;
+          parts.turret.position.x = TEND.table.x + 0.9 - (cutting ? 0.3 + Math.sin(p * Math.PI * 5) * 0.12 : 0);
+        }
+        const tip = { x: TEND.table.x, y: TEND.table.y + 0.2 - TEND.mc.z * 0, z: parts.tz };
+        stepSparks(parts.coolant, cutting && !legacy || (cutting && legacy), { x: tip.x, y: 1.25, z: tip.z }, rdt, 1.1, -4);
+        stepSparks(parts.chips, cutting, { x: tip.x, y: 1.15, z: tip.z }, rdt, 1.6, -8);
+        parts.edgeLed.emissive.setHex(legacy ? 0x333333 : chat ? 0xf5b82e : st.state === 'DOWN' ? 0xff3030 : 0x3ddc84);
+        parts.screen.emissive.setHex(st.state === 'DOWN' ? 0xff3030 : chat ? 0xf5b82e : cutting ? 0x58c4ff : 0x3ddc84);
+        break;
+      }
+      case 'deburr': {
+        const drill = busy && p > 0.12 && p < 0.42, washing = busy && p > 0.78;
+        parts.head.position.y += ((drill ? 1.85 : 2.3) - parts.head.position.y) * Math.min(1, rdt * 6);
+        if (drill) parts.bit.rotation.y += dts * 40;
+        stepSparks(parts.spray, washing, { x: 1.55, y: 1.6, z: Math.sin(t * 4) * 0.4 }, rdt, 1.4, -6);
+        parts.curtain.visible = washing;
+        parts.screen.emissive.setHex(st.state === 'DOWN' ? 0xff3030 : drill ? 0x58c4ff : washing ? 0x9fe8ff : 0x3ddc84);
+        break;
+      }
+      case 'matid':
+      case 'cmm': {
+        if (parts.gateSign) {
+          const passing = !!st.item && (st.itemT ?? 9) < this.sim.entryTime + 0.6;
+          parts.scan.visible = passing || (st.type === 'matid' && busy && p < 0.25);
+          if (parts.scan.visible) parts.scan.position.x = parts.gateX + Math.sin(t * 9) * 0.12;
+          const res = st.gate?.result, pc = res === 'rework' ? 0xf5b82e : res === 'scrap' ? 0xff4d4d : st.gate?.product ? ZONE_COLOR[st.gate.product] : 0xffffff;
+          parts.ringMat.color.setHex(pc); parts.ringMat.emissive?.setHex(pc);
+          parts.ringMat.emissiveIntensity = passing ? 6 : st.item ? 1.4 : 0.4;
+          drawGateSign(parts.gateSign, st);
+        }
+        if (st.type === 'cmm') {
+          // 문형 CMM: 측정 구간에 브리지가 X로 오가고 퀼이 내려와 프로브로 접촉 측정 · 리워크 중이면 리워크 스핀들
+          const meas = busy && p > 0.3 && p < 0.9 && !st.item?.scrap;
+          parts.bridge.position.x = 0.15 + (meas ? Math.sin(p * Math.PI * 6) * 0.45 : 0);
+          parts.car.position.z = meas ? Math.cos(p * Math.PI * 7) * 0.3 : 0;
+          const tq = meas ? -(2.55 - (BELT_Y + 0.25 + (st.item?.product ? PRODUCT_H[st.item.product] : 0.15)) - 1.12) * (0.6 + 0.4 * Math.abs(Math.sin(p * Math.PI * 14))) : 0;
+          parts.quill.position.y += (tq - parts.quill.position.y) * Math.min(1, rdt * 8);
+          parts.tipMat.emissiveIntensity = meas && Math.sin(p * Math.PI * 14) > 0.9 ? 6 : 1.2;
+          const rw = !!st.item?.reworked && busy && p < 0.6;
+          if (rw) parts.rwSpin.rotation.y += dts * 40;
+          parts.rwLamp.emissiveIntensity = rw ? 3 + Math.sin(t * 12) : 0.3;
+          parts.screen.emissive.setHex(st.state === 'DOWN' ? 0xff3030 : st.gate?.result === 'rework' ? 0xf5b82e : st.gate?.result === 'scrap' ? 0xff4d4d : 0x3ddc84);
+        } else if (parts.heat) drawHeatmap(parts.heat, st);
+        break;
+      }
       case 'vision': {
         const scanning = busy && parts.auto.visible;
         parts.scan.visible = scanning;
@@ -2772,7 +3028,7 @@ export class FactoryView {
         const waiting = sim.releaseTimer >= T - 1e-6;                    // 투입 시점인데 내려놓을 곳(빈 AMR)이 없으면 들고 대기
         const k = Math.min(1, sim.releaseTimer / T);
         const Z = parts.zoneStock;
-        // 정밀조립Zone: 재고를 혼류 비율로 양쪽에 나눠 보이고, 다음 투입 제품 쪽에서 집는다
+        // 적응가공Zone: 재고를 혼류 비율로 양쪽에 나눠 보이고, 다음 투입 제품 쪽에서 집는다
         let next = null, nDT = 0, nEA = 0;
         if (Z) {
           const w = sim.mix ?? { hblock: 1, rcover: 1 }, tot = (w.hblock || 0) + (w.rcover || 0) || 1;
@@ -2809,7 +3065,9 @@ export class FactoryView {
           parts.heldEA.visible = next === 'rcover'; parts.heldDT.visible = next !== 'rcover';
           const eaN = nEA - (hold && next === 'rcover' ? 1 : 0);
           Z.dt.setCount(nDT - (hold && next !== 'rcover' ? 1 : 0)); Z.ea.setCount(eaN);
-          Z.ea.boards.forEach((b, k) => { b.visible = eaN > (k + 1) * 9; });   // 위층이 있을 때만 그 아래 받침목
+          const dtN = nDT - (hold && next !== 'rcover' ? 1 : 0);
+          Z.ea.boards.forEach((b, k) => { b.visible = eaN > (k + 1) * Z.ea.per; });   // 위층이 있을 때만 그 아래 받침목
+          Z.dt.boards.forEach((b, k) => { b.visible = dtN > (k + 1) * Z.dt.per; });
         } else parts.stack.forEach((bx, i) => (bx.visible = i < raw - (hold ? 1 : 0)));
         break;
       }
@@ -2840,6 +3098,29 @@ export class FactoryView {
     ud.beam.visible = look;
     if (look) { ud.beam.scale.set(1, d.y - 0.2, 1); ud.beam.position.y = -(d.y - 0.2) / 2 - 0.1; ud.beam.material.color.setHex(d.mode === 'mission' ? 0xff8a3d : 0x37e8ff); ud.beam.material.opacity = d.mode === 'mission' ? 0.14 : 0.08; }
     dv.el.innerHTML = `${d.uid ? `<i class="uid">${d.uid}</i>` : ''}${d.id} · ${d.battery.toFixed(0)}%<em>${d.task ?? '대기'}</em>`;
+  }
+
+  // 머신텐딩 6축 로봇: AMR 위 소재 집기 → 가공기 문 앞 → 지그 안착 → 물러나 대기(가공) → 다시 들어가 집기 → AMR에 내려놓기
+  animTend(r, st, busy, p, i) {
+    const s = r.scale, A = r.arm, P = TEND_PH;
+    if (i > 0) { r.anim(false, 0); return; }
+    const th = r.root.rotation.y, c = Math.cos(th), sn = Math.sin(th);
+    const ik = (x, y, z) => { const dx = x - r.slot.x, dz = z - r.slot.z; return armIK(s, dx * c - dz * sn, y - 0.15, dx * sn + dz * c); };
+    const H = st.item?.product ? PRODUCT_H[st.item.product] : 0.15, top = BELT_Y + 0.05 + H;
+    const K = r.tendKeys?.[H] ?? ((r.tendKeys ??= {})[H] = {
+      home: ik(-0.6, 1.75, -0.9), amrUp: ik(0, top + 0.45, 0), amr: ik(0, top + 0.02, 0),
+      door: ik(TEND.table.x, 1.65, TEND.door.z + 0.1), mcUp: ik(TEND.table.x, TEND.table.y + H + 0.35, TEND.table.z), mc: ik(TEND.table.x, TEND.table.y + H + 0.02, TEND.table.z),
+    });
+    let q = K.home;
+    if (busy || (st.item && !st.done && st.state !== 'IDLE')) {
+      const keys = [[0, K.home], [P.pick, K.amrUp], [P.lift - 0.02, K.amr], [P.lift, K.amr], [P.lift + 0.03, K.amrUp], [P.door, K.door], [P.load - 0.03, K.mcUp], [P.load, K.mc], [P.out - 0.03, K.mcUp], [P.out, K.door], [P.cut0, K.home],
+        [P.cut1, K.home], [P.reach, K.door], [P.grab - 0.02, K.mcUp], [P.grab, K.mc], [P.grab + 0.02, K.mcUp], [P.back - 0.02, K.door], [P.place - 0.02, K.amrUp], [P.place, K.amr], [1, K.amrUp]];
+      const j = keys.findIndex((k) => k[0] >= p), [t0, a] = keys[Math.max(0, j - 1)], [t1, b] = keys[Math.max(0, j)];
+      const k = t1 > t0 ? (p - t0) / (t1 - t0) : 1, e = k * k * (3 - 2 * k);
+      q = a.map((v, n) => v + (b[n] - v) * e);
+    }
+    r.tendCur = r.tendCur ? r.tendCur.map((v, n) => v + (q[n] - v) * 0.3) : q.slice();
+    A.pose(r.tendCur[0], r.tendCur[1], r.tendCur[2], r.tendCur[3], 0, 0);
   }
 
   // 피지컬AI VLA 조립·체결 (6축 로봇): 손목 카메라로 선반 부품 인식 → 집기 → 대상물로 운반 → 조립(체결은 너트 돌림) → 선반 복귀
@@ -2919,9 +3200,9 @@ export class FactoryView {
       if (!A.cyc && A.queue > 0 && parts.auto.visible) {
         A.queue--;
         const arr = parts.zoneStacks[k], idx = Math.max(0, Math.min(arr.length - 1, sim.fgBy[k] + (sim.zone ? 0 : -A.queue - 1)));   // 놓을 자리 = 다음 칸 (구분 적재장은 집기 전이라 아직 안 셈)
-        const b = arr[idx].position, topY = 0.9 + 0.5;   // AMR 지그 위 박스 윗면
+        const H = sim.zone ? PRODUCT_H[k] ?? 0.15 : 0.5, b = arr[idx].position, topY = sim.zone ? BELT_Y + 0.05 + H : 0.9 + 0.5;   // AMR 지그 위 팔레트 윗면
         const pick = armIK(s, 0, topY, -rz), pickUp = armIK(s, 0, topY + 0.6, -rz);
-        const place = armIK(s, b.x, b.y + 0.25, b.z - rz), placeUp = armIK(s, b.x, b.y + 0.95, b.z - rz);
+        const place = armIK(s, b.x, b.y + (sim.zone ? H + 0.02 : 0.25), b.z - rz), placeUp = armIK(s, b.x, b.y + 0.95, b.z - rz);
         A.cyc = { t: 0, keys: [[0, home], [0.22, pickUp], [0.32, pick], [0.42, pickUp], [0.7, placeUp], [0.8, place], [0.9, placeUp], [1, home]], placed: false, grabBase: sim.stats.grabBy?.[k] ?? 0 };
       } else if (!A.cyc && !parts.auto.visible) A.queue = 0;
       let q = home;

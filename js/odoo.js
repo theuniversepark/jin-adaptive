@@ -135,7 +135,7 @@ export class OdooBridge {
     }
     const prod = Object.entries(w.prod).filter(([, v]) => v > 0);
     if (prod.length) {
-      const pk = { id: this.db.picking.length + 1, name: this.name('mrp'), type: 'production', origin: '정밀조립Zone 생산 실적', from: 'production', to: 'output', state: 'done', created: w.t0, done: this.now(), lines: prod.map(([p, q]) => ({ product: p, qty: q, done: q, from: 'production', to: 'output' })) };
+      const pk = { id: this.db.picking.length + 1, name: this.name('mrp'), type: 'production', origin: '적응가공Zone 생산 실적', from: 'production', to: 'output', state: 'done', created: w.t0, done: this.now(), lines: prod.map(([p, q]) => ({ product: p, qty: q, done: q, from: 'production', to: 'output' })) };
       for (const [p, q] of prod) this.quant.output[p] += q;
       this.db.picking.unshift(pk);
       this.emit({ type: 'production.done', key: pk.name, lines: pk.lines.map(({ product, qty }) => ({ product, qty, from: 'production', to: 'output' })) });

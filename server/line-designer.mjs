@@ -112,7 +112,7 @@ export async function designLine(client, { line, request, attachments = [] }) {
   const files = attachmentBlocks(attachments);
   const fileNote = attachments.length ? `\n\n## 첨부 파일 (${attachments.length}개)\n${attachments.map((a) => `- ${a.name}${a.note ? ` (${a.note})` : ''}`).join('\n')}\n위 첨부 파일의 내용을 근거로 라인 컨셉을 잡아 주십시오.` : '';
   const zone = isZone(current);
-  const zoneNote = zone ? `\n\n## ${ZONE_NAME} 제약\n현재 라인은 메타팩토리 테스트베드 ${ZONE_NAME}의 혼류 라인(유압블록 ${ZONE_PRODUCTS.hblock.customer} + 리어커버 ${ZONE_PRODUCTS.rcover.customer})입니다. 흐름: 자재 투입 → 부품분류셀(공동)에서 부품 종류 판별·분기 → 유압블록 라인(조립셀→체결셀) / 리어커버 라인(조립셀→체결셀) → 포장셀(공동)에서 합류·제품별 포장 → 구분 적재장의 제품별 구역. 6개 셀(${Object.values(ZONE_CELLS).map((c) => `${c.no}.${c.label}: ${c.use}`).join(', ')})이 바닥에 고정 배치되어 있어, stations의 id·순서·type은 그대로 두고 name·robot_kind·robot_count·cycle_s·task(셀 레시피)만 바꿀 수 있습니다. 제품 전용 셀의 부하는 사이클×혼류 비중입니다(현재 혼류 ${ZONE_MIXES[current.mix]?.label ?? '1 : 1'}). layout은 "straight"로 두면 됩니다(서버가 셀 배치로 되돌립니다). 셀 추가·삭제·순서 변경 요청이면 feasible을 false로 하고 사용자 라인에서 하도록 summary에 안내하십시오.` : '';
+  const zoneNote = zone ? `\n\n## ${ZONE_NAME} 제약\n현재 라인은 메타팩토리 테스트베드 ${ZONE_NAME}의 혼류 라인(유압블록 ${ZONE_PRODUCTS.hblock.customer} + 리어커버 ${ZONE_PRODUCTS.rcover.customer})입니다. 흐름: 소재 투입 → 소재 식별·3D측정셀(공동)에서 소재 판별·가공여유 스캔·분기 → 유압블록 라인(5축 가공셀→사선·디버링셀) / 리어커버 라인(정밀절삭셀→선삭·AI품질셀) → 초정밀 측정·리워크셀(공동, CMM)에서 합류·판정(NG는 리워크) → 합격품 적재장의 제품별 구역. 가공셀은 적응가공 폐루프(채터 진단·Feed/Speed 보정·공구 예지보전·CMM 오프셋 환류)를 씁니다. 6개 셀(${Object.values(ZONE_CELLS).map((c) => `${c.no}.${c.label}: ${c.use}`).join(', ')})이 바닥에 고정 배치되어 있어, stations의 id·순서·type은 그대로 두고 name·robot_kind·robot_count·cycle_s·task(셀 레시피)만 바꿀 수 있습니다. 제품 전용 셀의 부하는 사이클×혼류 비중입니다(현재 혼류 ${ZONE_MIXES[current.mix]?.label ?? '1 : 1'}). layout은 "straight"로 두면 됩니다(서버가 셀 배치로 되돌립니다). 셀 추가·삭제·순서 변경 요청이면 feasible을 false로 하고 사용자 라인에서 하도록 summary에 안내하십시오.` : '';
   const user = `## 현재 라인 (레이아웃 ${current.layout}, 병목: ${m.bottleneck?.name}, 이론 UPH ${Math.round(m.uph)})\n\`\`\`json\n${JSON.stringify(toWire(current))}\n\`\`\`${zoneNote}${fileNote}\n\n## 운영자 요청\n${request}`;
 
   const response = await client.beta.messages.create({
@@ -134,7 +134,7 @@ export async function designLine(client, { line, request, attachments = [] }) {
   let out;
   try { out = JSON.parse(text); } catch { throw new Error('Claude 응답을 해석하지 못했습니다.'); }
 
-  // 정밀조립Zone은 레이아웃·시나리오를 서버에서 유지한다 (스키마의 layout enum에는 zone이 없다)
+  // 적응가공Zone은 레이아웃·시나리오를 서버에서 유지한다 (스키마의 layout enum에는 zone이 없다)
   const { line: draft, errors, warnings } = normalizeLine(zone ? { ...out.line, layout: 'zone', mix: current.mix } : out.line);
   return {
     feasible: out.feasible && !errors.length,

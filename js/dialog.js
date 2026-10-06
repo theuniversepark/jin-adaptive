@@ -91,14 +91,14 @@ export function applyAction(a, sim, { by = '운영자 대화 지시', onMix, age
   switch (a.type) {
     case 'command': {
       const C = COMMANDS[a.code];
-      if (!a.target) return { ok: false, text: `${C.label}: 대상 셀을 지정하세요 (예: "포장셀 ${C.label}")` };
+      if (!a.target) return { ok: false, text: `${C.label}: 대상 셀을 지정하세요 (예: "CMM 측정셀 ${C.label}")` };
       const av = K.availability(a.code, a.target, a.arg);
       if (!av.ok && av.hard) return { ok: false, text: `${C.label} → ${name(a.target)}: ${av.reason}` };
       const c = K.issue(a.code, a.target, a.arg, { by, why: a.clause });
       return c ? { ok: true, cmd: c, text: `${C.icon} ${K.label(c)} → ${name(a.target)} (명령 #${c.id})` } : { ok: false, text: `${C.label}: 이 대상에는 쓸 수 없습니다` };
     }
     case 'mix': {
-      if (!sim.zone) return { ok: false, text: '혼류 비율은 정밀조립Zone 라인에서만 바꿀 수 있습니다' };
+      if (!sim.zone) return { ok: false, text: '혼류 비율은 적응가공Zone 라인에서만 바꿀 수 있습니다' };
       if (sim.line.mix === a.mix) return { ok: true, text: `혼류 비율은 이미 ${ZONE_MIXES[a.mix].label}입니다` };
       sim.setMix(a.mix); onMix?.(a.mix);
       return { ok: true, text: `혼류 비율 → 유압블록 : 리어커버 = ${ZONE_MIXES[a.mix].label}${a.note ? ` (${a.note})` : ''} · 다음 투입부터 적용` };

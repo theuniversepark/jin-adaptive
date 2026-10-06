@@ -43,7 +43,7 @@ export class CommandCenter {
   get link() { return LINK[this.sim.mode.key]; }
   cells() { return this.sim.processing.filter((st) => !st.standby); }
   targets(target) { return target === 'all' ? this.cells() : this.sim.processing.filter((st) => st.id === target); }
-  targetName(target) { return target === 'all' ? '정밀조립Zone 전체' : this.sim.processing.find((st) => st.id === target)?.name ?? target; }
+  targetName(target) { return target === 'all' ? '적응가공Zone 전체' : this.sim.processing.find((st) => st.id === target)?.name ?? target; }
   label(c) { const C = COMMANDS[c.code]; return `${C.label}${c.arg != null ? ` ${c.arg}${C.unit ?? ''}` : ''}`; }
   active() { return this.list.filter((c) => c.state !== 'done' && c.state !== 'rejected'); }
   pending(code, target, arg) { return this.active().find((c) => c.code === code && c.target === target && (arg == null || c.arg === arg)); }

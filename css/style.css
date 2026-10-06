@@ -299,6 +299,32 @@ body.app .topbar button, body.app .topbar .seg { -webkit-app-region: no-drag; }
 .zc-cell.p-rcover b { background: #9a6bff; }
 .zc-amr { margin-top: 6px; font-size: 11px; color: var(--ink2); padding: 4px 6px; border-radius: 7px; background: rgba(255, 255, 255, 0.04); }
 .zc-amr b { color: var(--ink); font-variant-numeric: tabular-nums; }
+/* 적응가공 폐루프 (A-2-5 통합 OCS) */
+.zc-ad { margin-top: 6px; padding: 6px 7px; border-radius: 8px; background: rgba(55, 232, 255, 0.05); border: 1px solid rgba(55, 232, 255, 0.18); font-size: 11px; color: var(--ink2); }
+.zc-ad .ad-h { color: var(--ink); font-weight: 700; margin-bottom: 4px; }
+.zc-ad .ad-h small { font-weight: 400; color: var(--muted); margin-left: 4px; }
+.zc-ad .ad-kpi { display: grid; gap: 2px; margin-bottom: 5px; }
+.zc-ad .ad-kpi small { color: var(--muted); }
+.zc-ad b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.zc-ad b.ok { color: var(--good); } .zc-ad b.warn { color: var(--warn); } .zc-ad b.bad { color: var(--bad); } .zc-ad .dim { color: var(--muted); }
+.zc-ad .ad-tool { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 1px 6px; margin: 2px 0; }
+.zc-ad .ad-tool span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zc-ad .ad-tool i { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); position: relative; overflow: hidden; }
+.zc-ad .ad-tool i::after { content: ''; position: absolute; inset: 0 auto 0 0; width: var(--w); background: var(--good); border-radius: 3px; }
+.zc-ad .ad-tool i.warn::after { background: var(--warn); } .zc-ad .ad-tool i.bad::after { background: var(--bad); }
+.zc-ad .ad-tool em { grid-column: 2; font-style: normal; font-size: 10px; color: var(--muted); }
+.zc-ad .ad-chart { margin-top: 5px; }
+.zc-ad .ad-chart svg { width: 100%; height: 40px; display: block; background: rgba(0, 0, 0, 0.18); border-radius: 5px; }
+.zc-ad .ad-chart .tol { fill: rgba(61, 220, 132, 0.12); } .zc-ad .ad-chart .mid { stroke: rgba(255, 255, 255, 0.25); stroke-width: 0.5; }
+.zc-ad .ad-chart circle { fill: #f0a030; } .zc-ad .ad-chart circle.rc { fill: #9a6bff; }
+.zc-ad .ad-chart circle.rework { stroke: var(--warn); stroke-width: 1.2; } .zc-ad .ad-chart circle.scrap { fill: var(--bad); }
+.zc-ad .ad-ev summary { cursor: pointer; color: var(--ink); margin-top: 4px; }
+.zc-ad .ad-ev ul { list-style: none; margin: 3px 0 0; padding: 0; display: grid; gap: 2px; }
+.zc-ad .ad-ev li { font-size: 10.5px; line-height: 1.35; }
+.zc-ad .ad-ev time { color: var(--muted); margin-right: 4px; font-variant-numeric: tabular-nums; }
+.zc-ad .ad-ev li.k-esc, .zc-ad .ad-ev li.k-break, .zc-ad .ad-ev li.k-scrap { color: var(--bad); }
+.zc-ad .ad-ev li.k-rework, .zc-ad .ad-ev li.k-miss { color: var(--warn); }
+.zc-ad .ad-ev li.k-auto, .zc-ad .ad-ev li.k-comp { color: #8fe3ff; }
 
 /* 단계 화살표 (레거시 › 자동화 › 피지컬AI) */
 #modeSeg { align-items: center; }

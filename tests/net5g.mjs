@@ -7,7 +7,7 @@ import { plan5G, NR } from '../js/net5g.js';
 let pass = 0, fail = 0;
 const check = (name, ok, info = '') => { ok ? pass++ : fail++; console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${name}${info ? '  — ' + info : ''}`); };
 console.log('== 기지국 배치 · PCI');
-for (const [nm, ln] of [['정밀조립Zone 1:1', zoneLine()], ['정밀조립Zone 2:1', zoneLine('2:1')], ['기본 라인', DEFAULT_LINE]]) {
+for (const [nm, ln] of [['적응가공Zone 1:1', zoneLine()], ['적응가공Zone 2:1', zoneLine('2:1')], ['기본 라인', DEFAULT_LINE]]) {
   const s = new Simulation('dark', 1, { line: ln, quiet: true }), p = plan5G(s), S = p.stats;
   check(`${nm}: 음영지역 0곳 (모든 지점 RSRP ≥ ${NR.design}dBm 설계 기준)`, S.holes === 0 && S.design === 1, `기지국 ${p.cells.length}대 · 지점 ${S.points} · 최저 ${S.minRsrp.toFixed(1)}dBm · SINR≥0dB ${(S.sinrOk * 100).toFixed(0)}%`);
   const domes = s.cctv.cams.filter((c) => c.region === 'inside'), gap = Math.min(...p.cells.map((c) => Math.min(...domes.map((k) => Math.hypot(k.x - c.x, k.z - c.z)))));

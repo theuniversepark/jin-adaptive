@@ -298,7 +298,7 @@ export function conveyorPath(a, b) {
   const turnX = 31.5;
   return [{ x: a.x, z: az }, { x: turnX, z: az }, { x: turnX, z: bz }, entry];
 }
-// 정밀조립Zone 경로: 셀 중앙 → 셀 출구 → (대각 이동) → 다음 셀 입구. 포장셀로 합류하는 두 줄은
+// 적응가공Zone 경로: 셀 중앙 → 셀 출구 → (대각 이동) → 다음 셀 입구. 포장셀로 합류하는 두 줄은
 // 입구 앞에서 좌우로 0.75m 떨어진 별도 대기 차로를 쓴다
 export function zonePath(a, b) {
   const az = a.z ?? 0, bz = b.z ?? 0;

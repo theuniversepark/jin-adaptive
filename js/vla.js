@@ -35,11 +35,14 @@ function phaseOf(u) { return u < 0.1 ? 'approach' : u < 0.3 ? 'grasp' : u < 0.55
 // AMMR: 부품 선반 왕복 → 양팔 작업 단계를 VLA 단계 이름으로
 const ammrPhase = (a) => (!a ? 'assemble' : a.phase === 'turnOut' || a.phase === 'driveOut' ? 'approach' : a.phase === 'pick' ? 'grasp' : a.phase === 'turnIn' || a.phase === 'driveIn' ? 'transport' : a.carry ? 'insert' : 'assemble');
 function instruction(st, kind, product, color, lead = true) {
-  if (!lead) return `${st.type === 'pack' ? '포장' : '분류'} 게이트 결정에 따라 작업물을 양팔로 잡아 고정하고 ${st.type === 'pack' ? '라벨을 붙여라' : 'ID 태그를 달아라'} (보조)`;
-  const prod = product === 'rcover' ? '리어커버' : product === 'hblock' ? '유압블록' : '제품';
-  const verb = st.type === 'screw' || st.type === 'fasten' ? '체결' : st.type === 'sort' ? '분류' : st.type === 'pack' ? '포장' : '조립';
-  if (kind === 'humanoid') return `머리 카메라로 피더의 부품을 확인하고 양손으로 집어 AMR 위 ${prod}에 ${verb}하라`;
-  return kind === 'ammr' ? `옆 선반으로 이동해 양팔로 부품을 집어 와 ${prod}에 ${verb}하라` : `선반의 ${color} 부품을 집어 AMR 위 ${prod}에 ${verb}하라`;
+  const cmm = st.type === 'cmm' || st.type === 'pack';
+  if (!lead) return `${cmm ? 'CMM 측정' : '소재 식별'} 게이트 결정에 따라 지그 팔레트를 양팔로 잡아 고정하고 ${cmm ? '판정 라벨을 붙여라' : '소재 ID 태그를 달아라'} (보조)`;
+  const prod = product === 'rcover' ? '리어커버' : product === 'hblock' ? '유압블록' : '소재';
+  if (st.type === 'mill5' || st.type === 'turn') return `AMR 위 ${prod} 소재를 파지해 ${st.type === 'turn' ? '터닝센터 척' : '5축 머시닝센터 지그'}에 안착하고, 가공이 끝나면 꺼내 AMR에 내려놓아라 (가공면 접촉·파지력 제한)`;
+  if (st.type === 'deburr') return `손목 카메라로 ${prod}의 교차홀 버를 찾아 디버링 툴로 제거하고 세척 노즐 앞에 정렬하라`;
+  const verb = st.type === 'matid' || st.type === 'sort' ? '클램프로 고정하고 3D 스캔 자세로 정렬' : cmm ? '측정 지그에 세팅' : st.type === 'screw' || st.type === 'fasten' ? '체결' : '조립';
+  if (kind === 'humanoid') return `머리 카메라로 ${prod}를 확인하고 양손으로 ${verb}하라`;
+  return kind === 'ammr' ? `옆 선반으로 이동해 양팔로 ${cmm ? '측정지그' : '클램프'}를 가져와 ${prod}를 ${verb}하라` : `선반의 ${color} 클램프를 집어 AMR 위 ${prod}를 ${verb}하라`;
 }
 
 // ── 에피소드 기록기 (3D 화면 쪽: 관절값·카메라는 화면 모델에서 읽는다) ─────────────────

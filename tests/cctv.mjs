@@ -6,7 +6,7 @@ import { planCCTV, camerasSeeing } from '../js/cctv.js';
 let pass = 0, fail = 0;
 const check = (name, ok, info = '') => { ok ? pass++ : fail++; console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${name}${info ? '  — ' + info : ''}`); };
 console.log('== 사각지대');
-for (const [nm, ln] of [['정밀조립Zone 1:1', zoneLine()], ['정밀조립Zone 2:1', zoneLine('2:1')], ['기본 라인', DEFAULT_LINE]]) {
+for (const [nm, ln] of [['적응가공Zone 1:1', zoneLine()], ['적응가공Zone 2:1', zoneLine('2:1')], ['기본 라인', DEFAULT_LINE]]) {
   const s = new Simulation('dark', 1, { line: ln, quiet: true }), t0 = performance.now(), p = planCCTV(s), S = p.stats;
   check(`${nm}: 사각지대 0곳 (건물 안·입고·출하 야드)`, S.blind === 0 && S.coverage === 1, `CCTV ${p.cams.length}대 (안 ${S.inside} · 야드 ${S.outside}) · 지점 ${S.points} · 이중 감시 ${(S.redundancy * 100).toFixed(0)}% · ${Math.round(performance.now() - t0)}ms`);
 }
@@ -24,10 +24,10 @@ console.log('== CCTV AI 감지 (피지컬AI)');
 console.log('== CCTV 에이전트 이력 · 오케스트레이터 연동');
 { const s = new Simulation('dark', 3, { line: zoneLine(), quiet: true }); for (let t = 0; t < 60; t += 0.1) s.step(0.1);
   const A = s.cctvAgent, ev = s.injectFieldEvent('leak', -5, 8); for (let t = 0; t < 4; t += 0.1) s.step(0.1);
-  const rep = A.history.find((h) => h.kind === 'report' && h.label === '바닥 누유');
+  const rep = A.history.find((h) => h.kind === 'report' && h.label === '절삭유 바닥 오염');
   check('감지 → 이력 등록(보고) · 오케스트레이터 인시던트 연결', !!rep && !!rep.inc && ev.detected && /CCTV 에이전트/.test(ev.detectedBy), rep ? `${rep.no} ${rep.cam} ${rep.model} ${rep.conf} → #${rep.inc?.id}` : '');
   check('오케스트레이터 타임라인에 CCTV 보고 단계', !!rep?.inc?.steps?.some((st) => /CCTV 에이전트 보고/.test(st.text)));
-  const st = s.stations.find((x) => x.type === 'fasten'); s.injectFault(st); for (let t = 0; t < 3; t += 0.1) s.step(0.1);
+  const st = s.stations.find((x) => x.type === 'mill5'); s.injectFault(st); for (let t = 0; t < 3; t += 0.1) s.step(0.1);
   check('설비 고장 인시던트 → 영상 기록 확보 이력', A.history.some((h) => h.kind === 'record'), A.history.map((h) => `${h.no}:${h.kind}`).join(' '));
   for (let t = 0; t < 600 && A.history.some((h) => h.status === 'open'); t += 0.1) s.step(0.1);
   check('인시던트 종료 시 이력도 종료(소요·결과 기록)', A.history.every((h) => h.status === 'closed' && h.dur > 0 && h.result), A.history.map((h) => `${h.no}:${h.status}:${h.dur?.toFixed(1)}s`).join(' '));
