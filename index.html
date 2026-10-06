@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jin-3D</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+  </script>
+</head>
+<body data-mode="smart">
+  <div id="viewport"></div>
+  <div id="cctvCard" hidden></div>
+  <div id="net5gCard" hidden></div>
+  <section id="gnbPanel" class="gnb-panel" hidden aria-label="5G 기지국 정보">
+    <div class="gnb-head"><div><h3 id="gnbTitle">5G 기지국</h3><small id="gnbSub"></small></div><button type="button" id="gnbClose" title="닫기">✕</button></div>
+    <div id="gnbBody"></div>
+  </section>
+  <section id="cctvPanel" class="cc-panel" hidden aria-label="CCTV 영상">
+    <div class="cc-head"><div><h3 id="cctvTitle">CCTV</h3><small id="cctvSub"></small></div>
+      <span class="cc-ptz"><button type="button" data-cctv="prev" title="이전 카메라">◀ 카메라</button><button type="button" data-cctv="left" title="PTZ 왼쪽">⟲</button><button type="button" data-cctv="right" title="PTZ 오른쪽">⟳</button><button type="button" data-cctv="next" title="다음 카메라">카메라 ▶</button></span>
+      <button type="button" id="cctvClose" title="닫기">✕</button></div>
+    <canvas id="cctvCanvas" width="640" height="360"></canvas>
+    <div id="cctvSave"></div>
+    <div id="cctvDet"></div>
+    <div id="cctvHist"></div>
+  </section>
+  <div id="facos" class="dark-only-flex" aria-label="FACOS 공장 운영 SW 계층 상태"></div>
+  <div id="glNote" hidden>3D 화면 복구 중… (그래픽 컨텍스트 재연결)</div>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">◆</div>
+      <div>
+        <h1>Jin-3D</h1>
+        <p>레거시 → 자동화 → 피지컬AI 자율공장 시뮬레이션 에이전트</p>
+      </div>
+    </div>
+    <button id="btnVla" class="dark-only vla-top" title="로봇 데이터·카메라 영상 → AI-ready 에피소드 → 서버 저장 → VLA 학습 → 평가 → 로봇 배포, 로봇별 에피소드 파일 다운로드">🧠 VLA 학습</button>
+    <button id="btnAios" class="dark-only vla-top aios-top" title="AIOS 공장 운영 AI — 현장 생산·운영 데이터 → AI-ready 운영 데이터셋 → 서버 저장 → 운영 정책 학습 → 디지털트윈 검증 → 오케스트레이터 배포, 운영 데이터셋 다운로드">🏭 AIOS 학습</button>
+    <button id="btnImpact" class="vla-top imp-top" title="이벤트·문제가 UPH · OEE · WIP · POWER에 미친 영향 분석 · 개선 제안 리포트 · 디지털트윈 검증 · 적용 여부 의사결정">📊 KPI 영향·개선<b id="impBadge" hidden></b></button>
+    <div class="seg" id="modeSeg">
+      <button data-mode="traditional">레거시</button><i class="seg-arrow">›</i>
+      <button data-mode="smart" class="on">자동화</button><i class="seg-arrow">›</i>
+      <button data-mode="dark">피지컬AI</button>
+    </div>
+    <button id="btnEstop" class="estop" title="상위 긴급 명령 — 정밀조립Zone 전체 비상정지 (발령 중에는 리셋 명령)">🛑 비상정지</button>
+    <div class="timectl">
+      <button id="playBtn" class="icon" title="일시정지/재생">❚❚</button>
+      <div class="seg small" id="speedSeg">
+        <button data-speed="1">1×</button>
+        <button data-speed="3" class="on">3×</button>
+        <button data-speed="10">10×</button>
+        <button data-speed="30">30×</button>
+      </div>
+      <div class="clock" id="clock">08:00:00</div>
+      <button id="btnSettings" class="icon app-only" title="Agent API 키 설정 (⌘,)">⚙</button>
+    </div>
+  </header>
+
+  <button type="button" class="side-tgl" id="tglLeft" title="왼쪽 패널(정밀조립Zone) 숨기기 · 단축키 [">◀</button>
+  <button type="button" class="side-tgl" id="tglRight" title="오른쪽 패널(자율운영 에이전트) 숨기기 · 단축키 ]">▶</button>
+  <aside class="panel left" id="kpiPanel">
+    <div class="zone-card" id="zoneCard"></div>
+    <div class="mode-desc" id="modeDesc"></div>
+    <div class="kpis" id="kpis"></div>
+    <div class="chart">
+      <div class="chart-h"><span>시간당 생산량 (UPH, 최근 10분)</span><b id="uphNow"></b></div>
+      <canvas id="chartUph" height="70"></canvas>
+    </div>
+    <div class="chart">
+      <div class="chart-h"><span>OEE (누적, %)</span><b id="oeeNow"></b></div>
+      <canvas id="chartOee" height="70"></canvas>
+    </div>
+  </aside>
+
+  <aside class="panel right" id="agentPanel">
+    <div class="agent-h">
+      <div class="agent-avatar" id="agentAvatar">AI</div>
+      <div>
+        <div class="agent-name" id="agentName">AI 운영 에이전트</div>
+        <div class="agent-sub"><span class="pill" id="agentPill">활성</span> 의사결정 <b id="agentCount">0</b>건</div>
+      </div>
+    </div>
+    <div class="engine">
+      <div class="seg small" id="engineSeg">
+        <button data-engine="rule" class="on">추론 기반</button>
+        <button data-engine="llm">대화 기반</button>
+      </div>
+      <label class="chk" title="Agent 응답을 기다리는 동안 시뮬레이션을 멈춥니다"><input type="checkbox" id="pauseThink" checked /> 응답 대기 시 일시정지</label>
+    </div>
+    <div class="engine arch-row">
+      <div class="seg small" id="archSeg" title="에이전트 구조: 단일 자율 에이전트 / 혼합형 다중 에이전트(반사 계층 + 정비·품질·흐름 에이전트 제안 + 메인 조정자) — 피지컬AI 기본 혼합형">
+        <button data-arch="single" class="on">단일 에이전트</button>
+        <button data-arch="hybrid">혼합형 다중</button>
+      </div>
+      <button type="button" id="archCompare" class="arch-cmp" title="같은 조건의 디지털트윈에서 단일 vs 혼합형을 실제로 돌려 비교">🔬 트윈 비교</button>
+    </div>
+    <div class="llm-status" id="llmStatus"></div>
+    <div class="thought" id="thought"></div>
+    <div class="loop"><span>관찰</span>→<span>판단</span>→<span>실행</span></div>
+    <div class="log" id="log"></div>
+    <form class="chatbox" id="chatForm" autocomplete="off">
+      <input id="chatInput" placeholder="공정 지시 (예: 포장셀 속도 75%, 도어트림 2:1, e-axle 조립셀 예방정비)" disabled />
+      <button type="submit" id="chatSend" disabled>전송</button>
+    </form>
+  </aside>
+
+  <div class="panel detail hidden" id="detail"></div>
+  <div class="cmd-banner" id="cmdBanner" role="status" aria-live="assertive" hidden></div>
+  <section class="panel orch hidden" id="orchPanel" aria-label="오케스트레이터 인시던트 흐름"></section>
+
+  <section class="panel dock" id="lineDock">
+    <button id="dockToggle" class="dock-title" type="button">
+      <span>🏭 공정 설계</span><span class="dock-line" id="dockLineName"></span><i id="dockArrow">▲</i>
+    </button>
+    <div class="dock-body">
+      <div class="dock-status" id="dockStatus"></div>
+      <div class="dock-summary" id="dockSummary"></div>
+      <div class="dock-meta">
+        <label>라인 이름 <input id="lineName" maxlength="40" /></label>
+        <label>레이아웃 <select id="lineLayout"></select></label>
+      </div>
+      <div class="dock-metrics" id="dockMetrics"></div>
+      <div class="st-list" id="stList"></div>
+      <div class="dock-actions">
+        <button type="button" id="stAdd">＋ 공정 추가</button>
+        <span class="dock-cost" id="dockCost"></span>
+        <button type="button" id="dockDefault">기본 라인</button>
+        <button type="button" id="dockRevert">되돌리기</button>
+        <button type="button" id="dockApply" class="primary">적용</button>
+      </div>
+    </div>
+    <div class="dock-files" id="dockFiles"></div>
+    <form class="dock-form" id="dockForm" autocomplete="off">
+      <button type="button" id="dockAttach" class="attach" title="공정도·레이아웃·설비 목록 파일 첨부 (PDF, 이미지, 엑셀, 워드, 텍스트) — 끌어다 놓아도 됩니다">📎</button>
+      <input type="file" id="dockFile" multiple hidden />
+      <input id="dockInput" maxlength="500" />
+      <button type="submit" id="dockSend">보내기</button>
+    </form>
+  </section>
+
+  <footer class="bottombar">
+    <button id="btnFault" title="임의 설비에 돌발 고장을 주입합니다">⚡ 설비 고장 주입</button>
+    <button id="btnSupply" title="자재 창고 출고를 10분간 중단합니다">⛔ 자재 공급 차질</button>
+    <button id="btnEvent" class="dark-only" title="누유·이물질·무단 진입·연기 의심 중 하나를 로봇 카메라 앞에 발생시킵니다 — 로봇 영상 AI 추론으로 감지해 자율 대응합니다">⚠ 현장 이벤트</button>
+    <button id="btnLabels" class="on">🏷 라벨</button>
+    <button id="btnOrch" title="설비 고장·공급 차질·현장 이벤트의 처리 흐름과, 셀 현장으로 보내는 긴급·제어 명령 콘솔">🛰 오케스트레이터 <b class="badge" id="orchBadge" hidden></b></button>
+    <button id="btnNet5g" title="Private 5G 특화망 — 음영지역 없는 기지국(PCI) 배치, RSRP 커버리지 지도, 로봇 ↔ 서빙 셀 연결선·핸드오버">📶 5G</button>
+    <button id="btnCctv" title="사각지대 없는 CCTV 배치 — 커버리지 지도(빨강 사각지대 · 연두 1대 · 초록 2대 이상)와 감시 반경">📹 CCTV</button>
+    <button id="btnData" title="AAS · OPC UA PubSub over MQTT 데이터 연동과 파일 저장">📡 데이터 연동</button>
+    <button id="btnOdoo" title="Odoo ERP 연동 — 발주(구매오더·입고) · 재고(로케이션·이동) · 설비보전(정비요청)">🏢 Odoo</button>
+    <button id="btnConcept">🧭 진화 컨셉</button>
+    <button id="btnCompare" class="primary">📊 3단계 8시간 비교</button>
+    <button id="btnReset">↺ 리셋</button>
+  </footer>
+
+  <div class="modal hidden" id="compare">
+    <div class="modal-card">
+      <div class="modal-h"><h2>단계별 성과 비교 <small>레거시 → 자동화 → 피지컬AI 자율 · 동일 조건 8시간 가동 시뮬레이션</small></h2><button id="closeCompare">✕</button></div>
+      <div id="compareBody"></div>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="concept">
+    <div class="modal-card wide">
+      <div class="modal-h"><h2>공장 진화 컨셉 <small>레거시 공장 → 자동화 공장 → 피지컬AI 기반 자율화 공장</small></h2><button id="closeConcept">✕</button></div>
+      <div id="conceptBody"></div>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="datahub">
+    <div class="modal-card wide">
+      <div class="modal-h"><h2>데이터 연동 <small>기준 시계 동기화 · AAS(Asset Administration Shell) 모델 · OPC UA PubSub(JSON) over MQTT · 파일 저장</small></h2><button id="closeData">✕</button></div>
+      <div id="dataBody"></div>
+    </div>
+  </div>
+  <div class="modal hidden" id="odooModal">
+    <div class="modal-card wide">
+      <div class="modal-h"><h2>🏢 Odoo ERP 연동 <small>ISA-95 레벨 4 — 발주(Purchase) · 재고(Inventory) · 설비보전(Maintenance) · 공장 운영(FACOS)은 실시간 판단, ERP는 기록·계획</small></h2><button id="closeOdoo">✕</button></div>
+      <div id="odooBody"></div>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="vlaModal">
+    <div class="modal-card wide">
+      <div class="modal-h"><h2>VLA 데이터 · 학습 파이프라인 <small>피지컬AI · 로봇 수집 데이터와 카메라 영상 → AI-ready 에피소드 → 서버 저장 → VLA 모델 학습 → 평가 → 로봇 배포</small></h2><button id="closeVla">✕</button></div>
+      <div id="vlaBody"></div>
+    </div>
+  </div>
+  <div class="modal hidden" id="aiosModal">
+    <div class="modal-card wide">
+      <div class="modal-h"><h2>AIOS · 공장 운영 AI <small>FACOS 관점 · 현장 생산·운영 데이터 → AI-ready 운영 데이터셋 → 서버 저장 → 운영 정책 학습 → 디지털트윈 검증 → 오케스트레이터 배포</small></h2><button id="closeAios">✕</button></div>
+      <div id="aiosBody"></div>
+    </div>
+  </div>
+  <div class="modal hidden" id="impactModal">
+    <div class="modal-card wide">
+      <div class="modal-h"><h2>KPI 영향 분석 · 개선 제안 <small>이벤트·문제 → UPH · OEE · WIP · POWER 손실 분해 → 개선 방법 · 제안 → 디지털트윈 검증 → 적용하시겠습니까? (적용 · 보류 · 실측 · 되돌리기)</small></h2><button id="closeImpact">✕</button></div>
+      <div id="impactBody"></div>
+    </div>
+  </div>
+  <div class="modal hidden" id="archModal">
+    <div class="modal-card wide">
+      <div class="modal-h"><h2>에이전트 구조 비교 <small>단일 자율 에이전트 vs 혼합형 다중 에이전트 — 같은 라인·시드·현장 이벤트·설비 고장으로 디지털트윈을 실제로 돌려 비교</small></h2><button id="closeArch">✕</button></div>
+      <div id="archBody"></div>
+    </div>
+  </div>
+  <div class="modal hidden" id="facosModal">
+    <div class="modal-card wide">
+      <div class="modal-h"><h2 id="facosTitle">FACOS</h2><button id="closeFacos">✕</button></div>
+      <div id="facosBody"></div>
+    </div>
+  </div>
+  <div class="modal hidden" id="gateModal">
+    <div class="modal-card wide">
+      <div class="modal-h"><h2>운영자 지시 게이트 <small id="gateSub"></small></h2><button data-close-gate>✕</button></div>
+      <p class="g-intro">대화 기반으로 입력한 지시는 조치마다 <b>해석 → 대상 확인 → 안전 규칙 → 실행 가능성 → 영향 평가</b>를 거쳐 판정됩니다. 통과하면 수행(명령 전송 → 셀 수신 확인 → 완료), 한 단계라도 막히면 거절하고 사유와 대안을 돌려줍니다.</p>
+      <div id="gateBody"></div>
+    </div>
+  </div>
+  <div class="modal hidden" id="settings">
+    <div class="modal-card small">
+      <div class="modal-h"><h2>Agent API 키 설정 <small>키는 macOS 키체인으로 암호화되어 이 Mac에만 저장되며, 화면(렌더러)으로는 전달되지 않습니다.</small></h2><button id="closeSettings">✕</button></div>
+      <div class="key-status" id="keyStatus"></div>
+      <form id="keyForm" autocomplete="off">
+        <input type="password" id="keyInput" placeholder="sk-ant-..." spellcheck="false" />
+        <div class="key-btns">
+          <button type="button" id="keyClear">저장된 키 삭제</button>
+          <button type="submit" class="primary">저장</button>
+        </div>
+      </form>
+      <p class="key-note">API 키는 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console</a>에서 발급받을 수 있습니다. 호출 비용은 패널에 표시됩니다.</p>
+    </div>
+  </div>
+
+  <div class="hint" id="hint">설비를 클릭하면 상세 정보 · 드래그 회전 · 휠 확대 · 방향키 이동(Shift 빠르게)</div>
+
+  <script>
+    // GitHub Pages 같은 정적 호스팅: 서버(Claude·MQTT)가 없으므로 호출하지 않는다. 파일 저장은 그대로 된다.
+    if (/\.github\.io$/.test(location.hostname)) window.JIN3D_NO_SERVER = true;
+  </script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
