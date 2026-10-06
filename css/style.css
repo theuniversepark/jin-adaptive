@@ -57,13 +57,13 @@ body[data-mode="dark"] #modeSeg button.on { background: #6d4aff; }
 .zc-cells { display: grid; gap: 3px; }
 .zc-cell { display: grid; grid-template-columns: 16px 1fr auto; grid-template-rows: auto auto; column-gap: 6px; padding: 4px 6px; border-radius: 7px; background: rgba(255, 255, 255, 0.04); border-left: 3px solid #2bb3a6; cursor: pointer; }
 .zc-cell:hover { background: rgba(255, 255, 255, 0.08); }
-.zc-cell.p-doortrim { border-left-color: #f0a030; }
-.zc-cell.p-eaxle { border-left-color: #9a6bff; }
+.zc-cell.p-hblock { border-left-color: #f0a030; }
+.zc-cell.p-rcover { border-left-color: #9a6bff; }
 .zc-branch { display: grid; gap: 4px; padding-left: 10px; border-left: 1px dashed rgba(255, 255, 255, 0.18); margin-left: 7px; }
 .zc-line { display: grid; gap: 3px; }
 .zc-line small { font-size: 10.5px; font-weight: 600; }
-.zc-line.p-doortrim small { color: #f5bd5c; }
-.zc-line.p-eaxle small { color: #b89bff; }
+.zc-line.p-hblock small { color: #f5bd5c; }
+.zc-line.p-rcover small { color: #b89bff; }
 .zone-card .zc-mix { margin: 3px 0 7px; }
 .zone-card .zc-mix button { padding: 4px 4px; font-size: 11px; }
 .zc-cell.off { opacity: 0.45; }
@@ -158,8 +158,8 @@ body.llm-on .agent-avatar { background: linear-gradient(135deg, #d97757, #f0c27b
 .st-label.sel { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(55, 160, 255, 0.35); }
 .st-label .nm { font-weight: 700; }
 .st-label .use { font-size: 10px; margin-top: 1px; color: #7fe0d6; }
-.st-label .use.u-doortrim { color: #f5bd5c; }
-.st-label .use.u-eaxle { color: #b89bff; }
+.st-label .use.u-hblock { color: #f5bd5c; }
+.st-label .use.u-rcover { color: #b89bff; }
 .st-label.standby { opacity: 0.55; border-style: dashed; }
 .chip.s-OFF { background: rgba(255, 255, 255, 0.05); color: var(--muted); }
 .st-label .row { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
@@ -271,7 +271,7 @@ body.app .topbar button, body.app .topbar .seg { -webkit-app-region: no-drag; }
 .dock-form button:disabled { opacity: 0.4; }
 .st-label .rb { font-size: 10px; color: #ffc58a; margin-top: 1px; }
 .st-label .gd { font-size: 10px; color: #9fb4c8; margin-top: 2px; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.st-label .gd.doortrim { color: #f0a030; } .st-label .gd.eaxle { color: #b89bff; }
+.st-label .gd.hblock { color: #f0a030; } .st-label .gd.rcover { color: #b89bff; }
 .st-label.changed { border-color: var(--good); box-shadow: 0 0 0 2px rgba(61, 220, 132, 0.35); }
 .st-label.changed .nm::after { content: " ● 변경"; color: var(--good); font-size: 10px; font-weight: 600; }
 .detail .task { font-size: 11.5px; color: var(--ink2); margin: 2px 0 6px; }
@@ -295,8 +295,8 @@ body.app .topbar button, body.app .topbar .seg { -webkit-app-region: no-drag; }
 .dock-summary .key-link { margin-top: 4px; border: 1px solid #d97757; background: rgba(217, 119, 87, 0.15); color: #f0a988; border-radius: 7px; padding: 4px 10px; font-size: 11.5px; }
 .st-card .ops.cell-use { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
 .st-label .nm .no, .zc-cell b, .st-card .no.cell { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: #2bb3a6; color: #04121f; font-size: 10px; font-weight: 800; margin-right: 4px; vertical-align: 1px; }
-.zc-cell.p-doortrim b { background: #f0a030; }
-.zc-cell.p-eaxle b { background: #9a6bff; }
+.zc-cell.p-hblock b { background: #f0a030; }
+.zc-cell.p-rcover b { background: #9a6bff; }
 .zc-amr { margin-top: 6px; font-size: 11px; color: var(--ink2); padding: 4px 6px; border-radius: 7px; background: rgba(255, 255, 255, 0.04); }
 .zc-amr b { color: var(--ink); font-variant-numeric: tabular-nums; }
 

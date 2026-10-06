@@ -16,6 +16,12 @@ export const STATION_TYPES = {
   pressfit: { label: '부품 압입',   effect: 'press',    cycle: 9,  wear: 0.3,  idleKW: 1.5, busyKW: 7,  task: '협동로봇 힘제어 압입 (하중-변위 모니터링)' },
   screw:    { label: '스크류 체결', effect: 'fasten',   cycle: 12, wear: 0.24, idleKW: 1,   busyKW: 4,  task: '스크류 자동 체결·토크 판정', verify: true },
   fasten:   { label: '부품 체결',   effect: 'fasten',   cycle: 12, wear: 0.28, idleKW: 1.5, busyKW: 6,  task: '다축 너트러너 볼트 체결·토크 판정', verify: true },
+  // 적응가공 셀 — adaptive: 공구 수명·채터·치수 편차를 엣지 AI가 진단하고 가공조건(Feed·Speed·Tool Offset)을 보정한다 (js/adaptive.js)
+  matid:    { label: '소재 식별·3D측정', effect: 'sort',    cycle: 8,  wear: 0.12, idleKW: 0.8, busyKW: 2.5, task: '소재 ID 판독·프리폼 3D 스캔·가공여유 측정' },
+  mill5:    { label: '5축 가공',    effect: 'machine',  cycle: 16, wear: 0.4,  idleKW: 6,   busyKW: 28, task: '5축 머시닝센터 밀링·드릴·탭 (로봇 머신텐딩)', adaptive: true },
+  deburr:   { label: '사선가공·디버링', effect: 'finish', cycle: 14, wear: 0.3,  idleKW: 3,   busyKW: 11, task: '사선 유로홀 가공·교차홀 로봇 디버링·세척', adaptive: true },
+  turn:     { label: '복합 선삭',   effect: 'machine',  cycle: 14, wear: 0.36, idleKW: 5,   busyKW: 22, task: '복합 터닝센터 보어 선삭·AI 품질예측', adaptive: true },
+  cmm:      { label: '초정밀 측정·리워크', effect: 'measure', cycle: 10, wear: 0.1, idleKW: 1.5, busyKW: 4, task: 'CMM 3D 측정·판정·리워크 분기', verify: true },
 };
 
 // factor: 사이클 배율(작을수록 빠름). 대수가 늘면 병렬 작업으로 사이클이 줄어든다.
@@ -35,7 +41,7 @@ export const LAYOUTS = {
   straight: { label: '일자형 (I)', desc: '투입→적재가 한 줄로 흐르는 직선 라인' },
   u:        { label: 'U자형 (U)',  desc: '두 줄로 접어 투입·적재가 같은 쪽에 오는 U셀 라인 (회전 컨베이어 포함)' },
 };
-export const layoutLabel = (k) => (k === 'zone' ? '셀형 Zone (정밀조립)' : LAYOUTS[k]?.label ?? k);
+export const layoutLabel = (k) => (k === 'zone' ? '셀형 Zone (적응가공)' : LAYOUTS[k]?.label ?? k);
 export const MAX_STATIONS = 8;
 export const MAX_ROBOTS = 4;
 export const PARALLEL_GAIN = 0.7;   // 로봇(작업자) 1대 추가 시 처리능력 +70%
@@ -52,37 +58,39 @@ export const DEFAULT_LINE = {
   ],
 };
 
-// ── 메타팩토리 테스트베드 정밀조립Zone (혼류 생산) ─────────────────
-// 자재 투입 → 부품분류셀(공동)에서 부품 종류를 판별해 도어트림 라인 / e-axle 라인으로 분기
-// → 각 라인의 조립셀 → 체결셀 → 포장셀(공동)로 합류 → 제품별 포장 후 구분 적재장의 제품별 구역에 적재.
+// ── 메타팩토리 테스트베드 적응가공Zone (A-2 · 혼류 생산) ─────────────────
+// 소재 투입 → 소재 식별·3D측정셀(공동, 프리폼 스캔 게이트)에서 소재를 판별해 유압블록 라인 / 리어커버 라인으로 분기
+// → 각 라인의 가공셀 2개 → 초정밀 측정·리워크셀(공동, CMM 게이트)로 합류 → 판정 합격품만 제품별 적재 구역에 적재.
+// 가공–측정–판정–보정–재가공 폐루프: 측정 결과를 상류 가공셀의 공구 오프셋으로 되먹인다 (js/adaptive.js)
+// 셀 코드는 협약 부록의 A-2-1~A-2-5 (A-2-5 통합 OCS는 셀이 아니라 존 전체 운영 SW로 표현)
 // side -1: 설비 앞면(작업자·AGV 쪽)이 뒤쪽 통로를 향하도록 앞뒤 반전 배치
-export const ZONE_NAME = '정밀조립Zone';
+export const ZONE_NAME = '적응가공Zone';
 export const ZONE_PRODUCTS = {
-  doortrim: { label: '도어트림', customer: '서연인테크' },
-  eaxle: { label: 'e-axle', customer: '쉐플러코리아' },
+  hblock: { label: '유압블록', full: '브레이크 유압제어블록', customer: '대승정밀', spec: 'A6082-T6 · 125×136×44mm' },
+  rcover: { label: '리어커버', full: '8속 리어커버', customer: '대승정밀', spec: 'ADC12 다이캐스팅 · 270×255mm' },
 };
 export const ZONE_CELLS = {
-  SORT:    { no: '1', type: 'sort',     label: '부품분류셀',      product: 'shared',   use: '공동 · 부품 종류 판별·분기', x: -18, z: 0 },
-  DT_ASSY: { no: '2', type: 'assembly', label: '도어트림 조립셀', product: 'doortrim', use: '도어트림 라인', x: -5, z: 4.6 },
-  DT_FAST: { no: '3', type: 'screw',    label: '도어트림 체결셀', product: 'doortrim', use: '도어트림 라인', x: 7, z: 4.6 },
-  EA_ASSY: { no: '4', type: 'assembly', label: 'e-axle 조립셀',  product: 'eaxle',    use: 'e-axle 라인', x: -5, z: -4.6, side: -1 },
-  EA_FAST: { no: '5', type: 'fasten',   label: 'e-axle 체결셀',  product: 'eaxle',    use: 'e-axle 라인', x: 7, z: -4.6, side: -1 },
-  PACK:    { no: '6', type: 'pack',     label: '포장셀',          product: 'shared',   use: '공동 · 제품별 포장', x: 18, z: 0 },
+  MATL:    { no: '1', type: 'matid',  label: '소재 식별·3D측정셀', product: 'shared', use: '공동 · 소재 판별·가공여유 측정', code: 'A-2-5', x: -18, z: 0 },
+  HB_MILL: { no: '2', type: 'mill5',  label: '유압블록 5축 가공셀', product: 'hblock', use: '유압블록 · 6면 밀링·드릴·탭', code: 'A-2-1', x: -5, z: 4.6 },
+  HB_DEBR: { no: '3', type: 'deburr', label: '유압블록 사선·디버링셀', product: 'hblock', use: '유압블록 · 사선홀·디버링·세척', code: 'A-2-1', x: 7, z: 4.6 },
+  RC_MILL: { no: '4', type: 'mill5',  label: '리어커버 정밀절삭셀', product: 'rcover', use: '리어커버 · 5축 정밀 절삭', code: 'A-2-2', x: -5, z: -4.6, side: -1 },
+  RC_TURN: { no: '5', type: 'turn',   label: '리어커버 선삭·AI품질셀', product: 'rcover', use: '리어커버 · 보어 선삭·품질예측', code: 'A-2-3', x: 7, z: -4.6, side: -1 },
+  CMM:     { no: '6', type: 'cmm',    label: '초정밀 측정·리워크셀', product: 'shared', use: '공동 · CMM 판정·리워크', code: 'A-2-4', x: 18, z: 0 },
 };
 const ZONE_SRC = { x: -28, z: 0 };
 const ZONE_SINK = { x: 28, z: 0 };
 // 제품별 경로 (투입·적재 제외)
 export const ZONE_ROUTES = {
-  doortrim: ['SORT', 'DT_ASSY', 'DT_FAST', 'PACK'],
-  eaxle: ['SORT', 'EA_ASSY', 'EA_FAST', 'PACK'],
+  hblock: ['MATL', 'HB_MILL', 'HB_DEBR', 'CMM'],
+  rcover: ['MATL', 'RC_MILL', 'RC_TURN', 'CMM'],
 };
 // 혼류 비율 (투입 순서는 비율에 맞춰 평준화)
 export const ZONE_MIXES = {
-  '1:1': { label: '1 : 1', w: { doortrim: 1, eaxle: 1 } },
-  '2:1': { label: '2 : 1', w: { doortrim: 2, eaxle: 1 } },
-  '1:2': { label: '1 : 2', w: { doortrim: 1, eaxle: 2 } },
-  dt: { label: '도어트림만', w: { doortrim: 1, eaxle: 0 } },
-  ea: { label: 'e-axle만', w: { doortrim: 0, eaxle: 1 } },
+  '1:1': { label: '1 : 1', w: { hblock: 1, rcover: 1 } },
+  '2:1': { label: '2 : 1', w: { hblock: 2, rcover: 1 } },
+  '1:2': { label: '1 : 2', w: { hblock: 1, rcover: 2 } },
+  hb: { label: '유압블록만', w: { hblock: 1, rcover: 0 } },
+  rc: { label: '리어커버만', w: { hblock: 0, rcover: 1 } },
 };
 // 셀 사이 물류: 조립 대상물을 실은 AMR이 셀 중앙(양쪽 협동로봇 사이)으로 들어와 정차한다
 // count: 대기열은 충전소 서쪽 빈 바닥에 16칸까지 — 더 늘리면 충전소와 겹치므로 대기열을 두 줄로 바꿔야 한다
@@ -102,18 +110,19 @@ export const AMMR = { rackZ: 3.75, pickZ: 2.95, slotZ: 1.9 };
 // AMMR 작업 사이클(진행률) 안의 부품 선반 왕복 구간 끝: 회전 → 주행 → 피킹 → 회전 → 복귀, 이후 작업 (place까지 부품을 들고 있음)
 export const AMMR_FETCH = { turnOut: 0.06, driveOut: 0.14, pick: 0.24, turnIn: 0.3, driveIn: 0.38, place: 0.5 };   // 구분 적재장의 제품별 구역 용량
 
+// 사이클은 시뮬레이션용 압축 가정값 (실측 사이클타임은 수요기업 AS-IS 진단 후 확정 — 운영시나리오 서식 '실측 후 산정')
 const ZONE_RECIPES = [
-  { id: 'SORT', robot: { kind: 'ammr', count: 2 }, cycle: 7, task: 'AMMR 양팔로 옆 부품 선반에서 부품을 가져와 판별·분류·키팅' },
-  { id: 'DT_ASSY', robot: { kind: 'cobot', count: 4 }, cycle: 14, task: '양쪽 협동로봇이 패널에 암레스트·스피커그릴·스위치 조립, 클립 압입' },
-  { id: 'DT_FAST', robot: { kind: 'cobot', count: 2 }, cycle: 14, task: '스크류 자동 체결, 토크·각도 전수 판정' },
-  { id: 'EA_ASSY', robot: { kind: 'cobot', count: 4 }, cycle: 16, task: '양쪽 협동로봇이 베어링 압입·로터·감속기어 삽입, 하우징 결합' },
-  { id: 'EA_FAST', robot: { kind: 'articulated', count: 1 }, cycle: 12, task: '하우징 볼트 다축 너트러너 체결, 토크·각도 전수 판정' },
-  { id: 'PACK', robot: { kind: 'ammr', count: 2 }, cycle: 8, task: 'AMMR 양팔로 옆 선반에서 포장재를 가져와 제품별 포장·라벨' },
+  { id: 'MATL', robot: { kind: 'ammr', count: 2 }, cycle: 8, task: 'AMMR 양팔로 옆 선반에서 클램프를 가져와 소재 고정·ID 판독·3D 스캔' },
+  { id: 'HB_MILL', robot: { kind: 'articulated', count: 1 }, cycle: 16, task: '6축 로봇이 소재를 5축 MC에 로딩, 6면 밀링·드릴·탭 후 언로딩' },
+  { id: 'HB_DEBR', robot: { kind: 'cobot', count: 2 }, cycle: 14, task: '사선 유로홀 가공, 협동로봇 교차홀 디버링·고압 세척' },
+  { id: 'RC_MILL', robot: { kind: 'articulated', count: 1 }, cycle: 18, task: '6축 로봇이 주물을 5축 MC에 로딩, 기준면·볼트홀 정밀 절삭' },
+  { id: 'RC_TURN', robot: { kind: 'articulated', count: 1 }, cycle: 14, task: '6축 로봇이 터닝센터에 로딩, 베어링 보어 선삭·절삭력 기반 품질예측' },
+  { id: 'CMM', robot: { kind: 'ammr', count: 2 }, cycle: 10, task: 'AMMR 양팔로 옆 선반에서 측정지그를 가져와 CMM 측정·판정·리워크 분기' },
 ];
 
 export function zoneLine(mix = '1:1') {
   return {
-    name: `${ZONE_NAME} · 도어트림 + e-axle 혼류`, layout: 'zone', mix,
+    name: `${ZONE_NAME} · 유압블록 + 리어커버 혼류`, layout: 'zone', mix,
     stations: ZONE_RECIPES.map((r) => ({ ...r, name: ZONE_CELLS[r.id].label, type: ZONE_CELLS[r.id].type, robot: { ...r.robot } })),
   };
 }
@@ -121,7 +130,7 @@ export const isZone = (line) => line?.layout === 'zone';
 export const defaultLineFor = (line) => cloneLine(isZone(line) ? zoneLine(line.mix) : DEFAULT_LINE);
 // 혼류 비율에 따른 셀별 처리 비중 (공동 셀은 1)
 export function zoneShare(line, id) {
-  const w = ZONE_MIXES[line.mix]?.w ?? ZONE_MIXES['1:1'].w, tot = w.doortrim + w.eaxle;
+  const w = ZONE_MIXES[line.mix]?.w ?? ZONE_MIXES['1:1'].w, tot = w.hblock + w.rcover;
   const p = ZONE_CELLS[id]?.product;
   return !p || p === 'shared' ? 1 : w[p] / tot;
 }
@@ -129,14 +138,14 @@ export function zoneShare(line, id) {
 export function lineEdges(line) {
   const ids = ['SRC', ...line.stations.map((s) => s.id), 'SINK'];
   if (!isZone(line)) return ids.slice(1).map((id, i) => [ids[i], id, null]);
-  const edges = [['SRC', 'SORT', null]];
+  const edges = [['SRC', 'MATL', null]];
   for (const [p, r] of Object.entries(ZONE_ROUTES)) {
     r.slice(1).forEach((id, i) => {
       const from = r[i], shared = ZONE_CELLS[from].product === 'shared' && ZONE_CELLS[id].product === 'shared';
       if (!edges.some((e) => e[0] === from && e[1] === id)) edges.push([from, id, ZONE_CELLS[from].product === 'shared' ? (shared ? null : p) : null]);
     });
   }
-  edges.push(['PACK', 'SINK', null]);
+  edges.push(['CMM', 'SINK', null]);
   return edges;
 }
 
@@ -156,7 +165,7 @@ export function effCycle(s, modeKey = 'smart') {
   return (s.cycle * kf) / (1 + PARALLEL_GAIN * (n - 1));
 }
 
-const TYPE_ALIASES = { 분류: 'sort', 압입: 'pressfit', 스크류: 'screw', 나사: 'screw', 체결: 'fasten', 가공: 'cnc', 절삭: 'cnc', 프레스: 'press', 레이저: 'laser', 용접: 'weld', 조립: 'assembly', 도장: 'paint', 비전: 'vision', 검사: 'vision', 시험: 'test', 포장: 'pack' };
+const TYPE_ALIASES = { 소재: 'matid', 스캔: 'matid', '5축': 'mill5', 밀링: 'mill5', 머시닝: 'mill5', 디버링: 'deburr', 사선: 'deburr', 선삭: 'turn', 터닝: 'turn', 측정: 'cmm', CMM: 'cmm', 리워크: 'cmm', 분류: 'sort', 압입: 'pressfit', 스크류: 'screw', 나사: 'screw', 체결: 'fasten', 가공: 'cnc', 절삭: 'cnc', 프레스: 'press', 레이저: 'laser', 용접: 'weld', 조립: 'assembly', 도장: 'paint', 비전: 'vision', 검사: 'vision', 시험: 'test', 포장: 'pack' };
 
 // 입력(사용자 편집·Claude 응답)을 검증·보정한다. errors가 있으면 적용 불가.
 export function normalizeLine(raw) {
@@ -330,9 +339,9 @@ export function buildStationDefs(line, modeKey) {
         : manual ? `${s.name.replace(/^(협동로봇|로봇|AI|자동)\s*/, '')} (수작업)` : s.name,
       robot: { ...robotForMode(s.robot, modeKey) }, task: taskForMode(s, modeKey), baseCycle: s.cycle, cycle: effCycle(s, modeKey),
       wear: T.wear, idleKW: T.idleKW, busyKW: T.busyKW, effect: T.effect, inspect: T.effect === 'inspect' || !!T.verify,
-      defectMul: T.defectMul ?? 1, share: isZone(line) ? zoneShare(line, s.id) : 1, product: ZONE_CELLS[s.id] && isZone(line) ? ZONE_CELLS[s.id].product : null,
+      defectMul: T.defectMul ?? 1, adaptive: !!T.adaptive, share: isZone(line) ? zoneShare(line, s.id) : 1, product: ZONE_CELLS[s.id] && isZone(line) ? ZONE_CELLS[s.id].product : null,
     });
   });
-  defs.push({ id: 'SINK', type: 'sink', ...nodes[n + 1], name: isZone(line) ? '구분 적재장 (제품별)' : '완제품 적재' });
+  defs.push({ id: 'SINK', type: 'sink', ...nodes[n + 1], name: isZone(line) ? '합격품 적재장 (제품별)' : '완제품 적재' });
   return defs;
 }

@@ -5,7 +5,7 @@ import { FactoryAgent } from '../js/agent.js';
 let pass = 0, fail = 0;
 const check = (name, ok, info = '') => { ok ? pass++ : fail++; console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${name}${info ? '  — ' + info : ''}`); };
 const mk = (mode) => { const s = new Simulation(mode, 3, { line: zoneLine(), quiet: false }); const ag = new FactoryAgent(s); const run = (sec) => { for (let t = 0; t < sec - 1e-9; t += 0.05) { s.step(0.05); ag.update(0.05); s.events = []; } }; return { s, run }; };
-{ const { s, run } = mk('dark'); run(200); const K = s.cmd, DT = 'DT_ASSY';
+{ const { s, run } = mk('dark'); run(200); const K = s.cmd, DT = 'HB_MILL';
   console.log('== 콘솔 가용성 규칙');
   check('평상시 비상정지 가능', K.availability('ESTOP', 'all').ok);
   check('평상시 리셋 불가(이유 표시)', !K.availability('RESET', 'all').ok && K.availability('RESET', 'all').reason === '비상정지 상태가 아닙니다');
@@ -24,7 +24,7 @@ const mk = (mode) => { const s = new Simulation(mode, 3, { line: zoneLine(), qui
   K.issue('SAFE_SPEED_OFF', 'all'); run(1); check('감속 해제 → 속도 50% 유지', K.lineSpeed === 0.5);
   K.issue('SPEED', 'all', 100); run(1); check('속도 100% 복귀', K.lineSpeed === 1 && s.processing.every((x) => K.speedOf(x) === 1));
   console.log('== 운전 재개(이전 구조): 보호정지·사이클 정지·감속·대피 한 번에 해제');
-  K.issue('SAFE_STOP', 'all'); K.issue('SAFE_SPEED', 'all'); K.issue('EVACUATE', 'all'); run(2); K.issue('CYCLE_STOP', 'EA_FAST'); run(2);
+  K.issue('SAFE_STOP', 'all'); K.issue('SAFE_SPEED', 'all'); K.issue('EVACUATE', 'all'); run(2); K.issue('CYCLE_STOP', 'RC_TURN'); run(2);
   K.issue('RESUME', 'all'); run(2);
   check('Zone 재개 → 보호정지·감속·대피·사이클 정지 해제', !K.pstopAll && !K.lineSafe && !K.evac && s.processing.every((x) => !x.cmd?.hold && !x.cmd?.safe), `p${K.pstopAll} s${K.lineSafe} e${K.evac}`);
   K.issue('SAFE_SPEED', DT); run(1); K.issue('RESUME', DT); run(1); check('셀 재개 → 그 셀 감속 해제', !s.processing.find((x) => x.id === DT).cmd.safe);

@@ -15,10 +15,10 @@
 import { WH } from './receiving.js';
 
 export const ODOO_PRODUCTS = {
-  raw: { code: 'RM-BOX', name: '원자재 박스 (도어트림·e-axle 공용)', price: 12000 },
+  raw: { code: 'RM-BOX', name: '원자재 박스 (유압블록·리어커버 공용)', price: 12000 },
   parts: { code: 'PT-KIT', name: '조립 부품 (클립·볼트·스피커그릴 키트)', price: 800 },
-  doortrim: { code: 'FG-DT', name: '도어트림 (완제품)', price: 185000 },
-  eaxle: { code: 'FG-EA', name: 'e-axle (완제품)', price: 2400000 },
+  hblock: { code: 'FG-DT', name: '유압블록 (완제품)', price: 185000 },
+  rcover: { code: 'FG-EA', name: '리어커버 (완제품)', price: 2400000 },
 };
 export const ODOO_LOCS = {
   vendor: { name: 'Partners/Vendors', usage: 'supplier' },
@@ -30,7 +30,7 @@ export const ODOO_LOCS = {
   cells: { name: 'WH/Line/셀', usage: 'internal' },
   output: { name: 'WH/Output/구분적재장', usage: 'internal' },
 };
-export const SUPPLIER = '공급사 (원자재·부품)', CUSTOMER = '완성차 고객사 (서연인테크 · 쉐플러코리아)';
+export const SUPPLIER = '공급사 (원자재·부품)', CUSTOMER = '완성차 고객사 (대승정밀 · 대승정밀)';
 const WINDOW = 600;   // 내부 이동·생산 입고 묶음 (공장 시계 초)
 
 export class OdooBridge {
@@ -40,9 +40,9 @@ export class OdooBridge {
     this.outbox = []; this.sent = 0;         // 실시간 Odoo로 보낼 이벤트
     this.seq = { po: 0, in: 0, int: 0, out: 0, mrp: 0, mr: 0 };
     this.db = { po: [], picking: [], mr: [], equipment: [] };
-    this.quant = Object.fromEntries(Object.keys(ODOO_LOCS).map((k) => [k, { raw: 0, parts: 0, doortrim: 0, eaxle: 0 }]));
+    this.quant = Object.fromEntries(Object.keys(ODOO_LOCS).map((k) => [k, { raw: 0, parts: 0, hblock: 0, rcover: 0 }]));
     this.byOrder = new Map(); this.byTruck = new Map(); this.byShip = new Map(); this.byStation = new Map();
-    this.win = null; this.good = { doortrim: 0, eaxle: 0 }; this.log = [];
+    this.win = null; this.good = { hblock: 0, rcover: 0 }; this.log = [];
     if (!this.on) return;
     // 마스터 데이터: 제품 · 로케이션 · 거래처 · 재주문 규칙 · 설비
     this.orderpoints = [
@@ -114,7 +114,7 @@ export class OdooBridge {
 
   // ── 내부 이동 · 생산 입고 (10분 묶음) ─────────────────
   window() {
-    if (!this.win) this.win = { t0: this.now(), int: [], prod: { doortrim: 0, eaxle: 0 } };
+    if (!this.win) this.win = { t0: this.now(), int: [], prod: { hblock: 0, rcover: 0 } };
     return this.win;
   }
   consume(type, qty, toName) {   // 선반 → 투입구(원자재) / 셀(부품)
@@ -148,7 +148,7 @@ export class OdooBridge {
     if (!this.on || qty <= 0) return;
     let pk = this.byShip.get(truck);
     if (!pk) { pk = { id: this.db.picking.length + 1, name: this.name('out'), type: 'outgoing', origin: `출하 ${truck.id}`, partner: CUSTOMER, from: 'output', to: 'customer', state: 'assigned', created: this.now(), done: null, truck: truck.id, lines: [] }; this.byShip.set(truck, pk); this.db.picking.unshift(pk); }
-    const p = product ?? 'doortrim', l = pk.lines.find((x) => x.product === p) ?? (pk.lines.push({ product: p, qty: 0, done: 0, from: 'output', to: 'customer' }), pk.lines.at(-1));
+    const p = product ?? 'hblock', l = pk.lines.find((x) => x.product === p) ?? (pk.lines.push({ product: p, qty: 0, done: 0, from: 'output', to: 'customer' }), pk.lines.at(-1));
     l.qty += qty; l.done += qty;
   }
   shipDone(truck) {
@@ -173,7 +173,7 @@ export class OdooBridge {
       return;
     }
     const type = kind === 'repair' ? 'corrective' : 'preventive';
-    const mr = { id: this.db.mr.length + 1, ref: this.name('mr'), name: kind === 'repair' ? `${st.name} 설비 고장` : `${st.name} ${kind === 'pm' ? '예지·예방 정비' : kind === 'cal' ? '재보정' : '정비'}`, equipment: e.serial_no, equipmentName: e.name, type, stage: 'new', request_date: this.now(), start: null, close: null, duration: 0, tech: null, description: reason || (kind === 'repair' ? `건강도 ${st.health.toFixed(0)}% · 가동 정지` : `건강도 ${st.health.toFixed(0)}% · RUL 기반 정비 지시`) };
+    const mr = { id: this.db.mr.length + 1, ref: this.name('mr'), name: kind === 'repair' ? `${st.name} 설비 고장` : `${st.name} ${kind === 'pm' ? '예지·예방 정비' : kind === 'cal' ? '재보정' : kind === 'tool' ? '공구교체' : '정비'}`, equipment: e.serial_no, equipmentName: e.name, type, stage: 'new', request_date: this.now(), start: null, close: null, duration: 0, tech: null, description: reason || (kind === 'repair' ? `건강도 ${st.health.toFixed(0)}% · 가동 정지` : `건강도 ${st.health.toFixed(0)}% · RUL 기반 정비 지시`) };
     this.db.mr.unshift(mr); this.byStation.set(st.id, mr); e.requests++; e.open++;
     // 오케스트레이터 인시던트와 연결: 고장 인시던트 타임라인에 ERP 정비요청 번호를 남긴다
     const inc = this.sim.orch?.find(`fail:${st.id}`);

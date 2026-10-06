@@ -9,6 +9,7 @@ import { Private5G } from './net5g.js';
 import { OdooBridge } from './odoo.js';
 import { VLAPipeline } from './vla.js';
 import { AIOSPipeline } from './aios.js';
+import { AdaptiveControl } from './adaptive.js';
 import { Orchestrator, PRIORITY, prioOf } from './orchestrator.js';
 import { AMMR, AMMR_FETCH, PARALLEL_GAIN, DEFAULT_LINE, buildStationDefs, linkPath, lineEdges, pathLength, pointAt, toWorld, isZone, ZONE_AMR, ZONE_MIXES, ZONE_PRODUCTS, FG_ZONE_CAP, amrPark, AMR_DOCK, amrDockVia, amrReturnVia } from './line.js';
 
@@ -59,8 +60,8 @@ export const MODES = {
 
 // 현장 이벤트 (피지컬AI 단계: 로봇 카메라 영상의 AI 추론으로 감지 → 자율 대응)
 export const FIELD_EVENTS = {
-  leak:      { label: '바닥 누유', cls: '누유', severity: 'alarm', response: 'clean', task: '누유 흡착·세척', radius: 1.3, prio: 2 },
-  debris:    { label: '바닥 이물질', cls: '이물질', severity: 'warn', response: 'clean', task: '이물질 수거', radius: 1.0, prio: 2 },
+  leak:      { label: '절삭유 바닥 오염', cls: '누유', severity: 'alarm', response: 'clean', task: '누유 흡착·세척', radius: 1.3, prio: 2 },
+  debris:    { label: '바닥 칩 비산', cls: '이물질', severity: 'warn', response: 'clean', task: '이물질 수거', radius: 1.0, prio: 2 },
   intrusion: { label: '안전구역 무단 진입', cls: '사람', severity: 'alarm', response: 'safety', task: '', radius: 2.2, prio: 1 },
   smoke:     { label: '연기 의심', cls: '연기', severity: 'alarm', response: 'inspect', task: '열화상 정밀 점검', radius: 1.8, prio: 1 },
 };
@@ -69,6 +70,7 @@ export const FIELD_EVENTS = {
 // at: 정비실 안 보관 위치(정비실 기준 로컬 x, 앞쪽 픽업 z) — 공구 카트·작업대 / 청소 코너 / 소화기
 export const TOOL_KITS = {
   repair: { label: '수리 공구 세트', items: '공구함 · 토크렌치 · 멀티미터', vis: 'toolbox', at: -1.15 },
+  tool:   { label: '교체 공구 세트', items: '프리셋된 엔드밀·드릴·바이트 · 툴홀더 · 더미가공 시편', vis: 'toolbox', at: -1.15 },
   pm:     { label: '예지정비 키트', items: '진동 분석기 · 그리스 건 · 교체 부품', vis: 'diag', at: 0.35 },
   cal:    { label: '보정 키트', items: '다이얼 게이지 · 보정 지그', vis: 'diag', at: 0.35 },
   leak:   { label: '누유 처리 키트', items: '흡착재 키트 · 대걸레 · 버킷', vis: 'mop', at: 4.35 },
@@ -397,16 +399,16 @@ export class Simulation {
     });
     // 혼류 투입 순서 (평준화): 비율 대비 누적 투입이 가장 뒤처진 제품을 먼저 투입
     this.mix = this.zone ? (ZONE_MIXES[this.line.mix] ?? ZONE_MIXES['1:1']).w : null;
-    this.releasedBy = { doortrim: 0, eaxle: 0 }; this.mixBase = { doortrim: 0, eaxle: 0 };
-    this.fgBy = { doortrim: 0, eaxle: 0 };
+    this.releasedBy = { hblock: 0, rcover: 0 }; this.mixBase = { hblock: 0, rcover: 0 };
+    this.fgBy = { hblock: 0, rcover: 0 };
 
     // 투입·적재 도크는 레이아웃에 따라 달라진다 (U자형이면 적재는 뒤쪽 통로)
     // 적재장 상차 위치: Zone 구분 적재장은 제품 구역(앞쪽 적재 팔레트)과 겹치지 않게 조금 더 앞에서 싣는다
     this.loc = { ...LOC, SRC: localLoc(this.stations[0].def, 0, 4.2, '투입구'), SINK: localLoc(this.stations[this.stations.length - 1].def, 0, isZone(this.line) ? 5.4 : 4.2, '완제품 적재장') };
-    // 출하 지게차 상차 위치: 구분 적재장 앞쪽(도어트림 구역)·뒤쪽(e-axle 구역)
+    // 출하 지게차 상차 위치: 구분 적재장 앞쪽(유압블록 구역)·뒤쪽(리어커버 구역)
     const sinkDef = this.stations[this.stations.length - 1].def;
-    this.loc.PICK_DT = { ...this.loc.SINK, name: isZone(this.line) ? '도어트림 적재 구역' : '완제품 적재장' };
-    this.loc.PICK_EA = localLoc(sinkDef, 0, -5.4, 'e-axle 적재 구역');
+    this.loc.PICK_DT = { ...this.loc.SINK, name: isZone(this.line) ? '유압블록 적재 구역' : '완제품 적재장' };
+    this.loc.PICK_EA = localLoc(sinkDef, 0, -5.4, '리어커버 적재 구역');
 
     this.vehicles = [];
     for (let i = 0; i < m.vehicles; i++) {
@@ -495,6 +497,7 @@ export class Simulation {
     new AIOSPipeline(this);
     this.cctvAgent = new CCTVAgent(this);   // 피지컬AI: CCTV 에이전트 (영상 감시 · 오케스트레이터 보고 · 이벤트 이력)
     this.net = new Private5G(this);   // Private 5G 특화망: 음영 없는 기지국 배치 · 이동 로봇 5G 모뎀 · 핸드오버 · 무손실 업링크 (자동화·피지컬AI)
+    this.adaptive = new AdaptiveControl(this);   // 적응가공 폐루프: 진단·보정·측정·판정·리워크 (adaptive.js)
     this.erp = new OdooBridge(this);   // Odoo ERP 연동: 발주·재고·설비보전 (자동화·피지컬AI)
   }
 
@@ -989,7 +992,7 @@ export class Simulation {
       const { item } = c.items.shift();
       if (item.defect) this.stats.escaped++; else { this.stats.good++; if (item.product) this.stats.goodBy[item.product] = (this.stats.goodBy[item.product] ?? 0) + 1; }
       if (item.product) this.fgBy[item.product]++;
-      this.erp?.produced(item.product ?? 'doortrim');   // Odoo: 생산 입고 (구분 적재장에 들어온 수량 — 유출 불량 포함)
+      this.erp?.produced(item.product ?? 'hblock');   // Odoo: 생산 입고 (구분 적재장에 들어온 수량 — 유출 불량 포함)
       this.releaseCarrier(item, sink.def);
       this.fgStock++;
       sink.c.processed++;
@@ -1004,9 +1007,9 @@ export class Simulation {
 
   // ── 분류·포장 게이트 (혼류) ─────────────────
   // 셀 입구의 게이트가 들어오는 대상물을 비전·ID로 판별해 결정을 내리고, 그 결정에 맞는 로봇이 주 작업을 맡는다.
-  // 분류셀: 도어트림/e-axle 판별 → 해당 제품 라인으로 분기 + 그 제품 쪽 로봇이 제품별 부품 키팅, 반대쪽 로봇은 작업물 고정·ID 태그
-  // 포장셀: 도어트림 → 트레이 포장 / e-axle → 크레이트 포장 — 그 포장재 매거진 쪽 로봇이 포장, 반대쪽 로봇은 고정·라벨
-  // 로봇 쪽: 도어트림 = +z(홀수 번째 로봇), e-axle = −z(짝수 번째 로봇). 같은 쪽 로봇이 없으면 첫 로봇이 맡는다
+  // 분류셀: 유압블록/리어커버 판별 → 해당 제품 라인으로 분기 + 그 제품 쪽 로봇이 제품별 부품 키팅, 반대쪽 로봇은 작업물 고정·ID 태그
+  // 포장셀: 유압블록 → 트레이 포장 / 리어커버 → 크레이트 포장 — 그 포장재 매거진 쪽 로봇이 포장, 반대쪽 로봇은 고정·라벨
+  // 로봇 쪽: 유압블록 = +z(홀수 번째 로봇), 리어커버 = −z(짝수 번째 로봇). 같은 쪽 로봇이 없으면 첫 로봇이 맡는다
   gateDecide(st) {
     if (st.def.type !== 'sort' && st.def.type !== 'pack') return;
     const it = st.item, n = st.def.robot?.count ?? 0, all = [...Array(n).keys()];
@@ -1014,10 +1017,10 @@ export class Simulation {
       st.gate = { id: it.id, product: null, t: this.time, text: it.scrap ? '빈 AMR — 작업 없이 통과' : '판별 완료', lead: it.scrap ? [] : all, role: null };
       return;
     }
-    const side = it.product === 'doortrim' ? 1 : -1, P = ZONE_PRODUCTS[it.product]?.label ?? it.product;
+    const side = it.product === 'hblock' ? 1 : -1, P = ZONE_PRODUCTS[it.product]?.label ?? it.product;
     let lead = all.filter((i) => (i % 2 ? 1 : -1) === side);
     if (!lead.length) lead = n ? [0] : [];
-    const sort = st.def.type === 'sort', tray = it.product === 'doortrim';
+    const sort = st.def.type === 'sort', tray = it.product === 'hblock';
     st.gate = {
       id: it.id, product: it.product, t: this.time, lead,
       text: sort ? `${P} → ${P} 라인 · ${P} 키트` : `${P} → ${tray ? '트레이' : '크레이트'} 포장`,
@@ -1099,7 +1102,7 @@ export class Simulation {
       st.itemFrom = inC.path[inC.path.length - 1];   // 들어온 경로의 끝점 (합류 대기 차로는 중심선에서 비켜 있음)
       st.item = e.item; st.progress = 0; st.done = false; st.itemT = 0;
       this.gateDecide(st);
-      const base = st.def.cycle * m.cycleMul * st.speedMul * (this.vla?.cycleFactor(st) ?? 1);   // 배포된 VLA 모델 버전만큼 사이클 단축
+      const base = st.def.cycle * m.cycleMul * st.speedMul * (this.vla?.cycleFactor(st) ?? 1) * (this.adaptive?.onStart(st, st.item) ?? 1);   // 적응 공구경로: 스캔한 가공여유만큼 에어컷 단축   // 배포된 VLA 모델 버전만큼 사이클 단축
       st.cycleTime = st.item.scrap ? 0.5 : Math.max(base * 0.6, base * (1 + m.cycleVar * gauss(this.rand)));
     }
     if (!st.item && cycleStop) { st.state = 'CSTOP'; st.c.stop = (st.c.stop ?? 0) + dt; }
@@ -1109,7 +1112,9 @@ export class Simulation {
       st.starvedFor = 0; st.itemT += dt;
       if (!st.done) {
         st.state = 'BUSY'; st.c.busy += dt; st.powerSave = false;
-        st.progress += (dt / st.cycleTime) * this.cmd.speedOf(st);
+        st.progress += (dt / st.cycleTime) * this.cmd.speedOf(st) * (st.ad ? this.adaptive.speedOf(st, dt) : 1);   // 채터 보정 중 Feed·Speed override
+        if (st.ad) this.adaptive.tick(st, dt);
+        if (st.state !== 'BUSY') return;   // 채터 자율복구 실패·공구 파손으로 셀이 멈춤
         if (this.rand() < this.hazard(st) * dt) { this.fail(st); return; }
         if (st.progress >= 1) { st.progress = 1; st.done = true; this.completeCycle(st); }
       }
@@ -1149,6 +1154,33 @@ export class Simulation {
     const wear = st.def.wear * m.wearMul * (st.speedMul < 1 ? 1.3 : 1) * ((st.cmd?.override ?? 1) > 1 ? 1.4 : 1) * (0.6 + this.rand() * 0.8);
     st.health = Math.max(0, st.health - wear);
     st.drift += this.rand() * 0.008 * m.wearMul;
+    if (st.def.type === 'cmm' && this.adaptive) {
+      // 초정밀 측정·판정: 합격 / 리워크(셀 안 리워크 스테이션에서 잔량 재가공 후 재측정) / 폐기 — 측정값은 상류 가공셀 오프셋으로 환류
+      it.inspected = true;
+      // 레거시: CMM은 하루 2회 측정실 샘플 검사 — 나머지는 외관 확인만 (편차를 못 보고 통과)
+      const sampled = m.key !== 'traditional' || it.broken || this.rand() < 0.35;
+      const res = sampled ? this.adaptive.onMeasure(st, it) : 'ok';
+      if (!sampled) {   // 측정하지 않은 소재는 편차가 있어도 그대로 합격 처리 → 유출 불량
+        if (Object.values(it.devs ?? {}).some((d) => Math.abs(d) > 20) || it.burr) it.defect = true;
+        it.packed = true; return;
+      }
+      if (res === 'rework') {
+        it.reworked = true; it.burr = false; this.stats.rework = (this.stats.rework ?? 0) + 1;
+        for (const k of Object.keys(it.devs ?? {})) it.devs[k] = +(it.devs[k] * 0.15).toFixed(1);   // 잔량 재가공 → 공차 안으로
+        st.progress = 1 - 0.6 * (this.adaptive.mode.reworkMul ?? 1); st.done = false;   // 재가공 + 재측정 시간만큼 셀에 더 머문다
+        this.log('warn', `${st.name} 리워크 #${it.id}`, { obs: `CMM 판정 NG(잔량) — ${it.dev > 0 ? '+' : ''}${it.dev}µm`, act: '셀 안 리워크 스테이션 재가공 → 재측정 · 상류 공구 오프셋 보정' });
+        return;
+      }
+      if (res === 'scrap') it.defect = true;
+      if (it.defect) {
+        st.c.defects++; this.stats.rejected++;
+        this.emit('reject', { item: { ...it, carrier: null }, st });
+        if (it.carrier) { it.scrap = true; it.defect = false; return; }
+        st.item = null; st.done = false; return;
+      }
+      it.packed = true;   // 합격 라벨 → 제품별 적재
+      return;
+    }
     if (st.def.inspect) {
       it.inspected = true;
       if (it.defect && this.rand() < m.catchRate) {
@@ -1163,10 +1195,16 @@ export class Simulation {
         st.item = null; st.done = false;
         return;
       }
+    } else if (st.ad) {
+      this.adaptive.onComplete(st, it);
+      if (st.state === 'DOWN') return;   // 공구 파손
     } else {
       const p = (m.defectBase / 4) * (st.def.defectMul ?? 1) * (1 + (100 - st.health) / 50) * (1 + st.drift * 1.5) * (this.vla?.defectFactor(st) ?? 1);
       if (!it.defect && this.rand() < p) { it.defect = true; it.defectBy = st.id; st.c.defects++; }
     }
+    if (st.def.type === 'matid') this.adaptive?.onScan(st, it);
+    if (st.def.type === 'deburr') it.deburred = true;
+    if (st.def.type === 'turn') it.turned = true;
     if (st.def.effect === 'sort') it.sorted = true;
     else if (st.def.effect === 'press') it.pressed = true;
     else if (st.def.effect === 'fasten') it.fastened = true;
@@ -1176,7 +1214,7 @@ export class Simulation {
     else if (st.def.effect === 'pack') it.packed = true;
   }
 
-  fail(st) {
+  fail(st, reason = null) {
     const m = this.mode;
     st.state = 'DOWN';
     st.repairRemaining = st.repairTotal = m.repairTime * (0.7 + this.rand() * 0.6);
@@ -1184,7 +1222,7 @@ export class Simulation {
     // 인시던트: 현장 감지 → 셀 자체 조치 → 상위 보고 → (판단 지연 후) 판단·명령 → 정비 출동
     const o = this.orch, who = m.techKind === 'humanoid' ? '정비 휴머노이드' : '정비원';
     const inc = o.open('equipment', `fail:${st.id}`, `${st.name} 설비 고장`, st.name, { where: { x: st.x, z: st.z } });
-    o.step(inc, 'field', 'detect', m.agentActive ? `IoT 알람 — 건강도 ${st.health.toFixed(0)}%, 진동·전류 이상, 가동 정지` : (m.andon ? `설비 정지 — 안돈 알람 자동 호출 (경광등·호출 버저, 반장 확인까지 약 ${m.alarmDelay}초)` : `설비 정지 — 작업자가 이상을 발견하기까지 약 ${m.alarmDelay}초`));
+    o.step(inc, 'field', 'detect', reason ? `${reason} — ${m.agentActive ? 'AE·절삭력 급변 감지, 가동 정지' : '작업자 발견'}` : m.agentActive ? `IoT 알람 — 건강도 ${st.health.toFixed(0)}%, 진동·전류 이상, 가동 정지` : (m.andon ? `설비 정지 — 안돈 알람 자동 호출 (경광등·호출 버저, 반장 확인까지 약 ${m.alarmDelay}초)` : `설비 정지 — 작업자가 이상을 발견하기까지 약 ${m.alarmDelay}초`));
     o.step(inc, 'cell', 'self', m.agentActive ? '셀 자체 조치: 비상 정지 · 작업물 보류 · 자가 진단 → 재가동 불가' : '셀 자체 조치 없음 (수동 설비)');
     const pending = !!st.request;
     if (pending) { st.request.kind = 'repair'; this.erp?.maintenance(st, 'repair'); }
@@ -1238,7 +1276,7 @@ export class Simulation {
 
   assignTechs() {
     // 우선순위 순: 긴급수리(P3) → 재보정·예지정비(P5). 화재·인명(P1) 대응 중에는 예지정비·재보정을 보류해 정비 인력을 안전 대응에 남긴다
-    const KP = { repair: 3, cal: 5, pm: 5 }, p1 = this.orch.urgentOpen(1).length > 0;
+    const KP = { repair: 3, tool: 4, cal: 5, pm: 5 }, p1 = this.orch.urgentOpen(1).length > 0;
     const order = [...this.requests].sort((a, b) => KP[a.kind] - KP[b.kind] || a.readyAt - b.readyAt);
     for (const req of order) {
       if (req.tech || this.time < req.readyAt) continue;
@@ -1253,7 +1291,7 @@ export class Simulation {
       if (!best) continue;
       req.tech = best; best.job = { prio: KP[req.kind], st, req }; this.erp?.maintStart(st, best);
       if (req.kind === 'repair') this.orch.step(this.orch.find(`fail:${st.id}`), 'exec', 'act', `${best.id} 배정 · 출동`);
-      const kindLabel = { repair: '긴급수리', pm: '예지정비', cal: '재보정' }[req.kind];
+      const kindLabel = { repair: '긴급수리', pm: '예지정비', cal: '재보정', tool: '공구교체' }[req.kind];
       const T = toolSteps(this, best, req.kind, req.kind === 'repair' ? this.orch.find(`fail:${st.id}`) : null);
       best.setTask(`${kindLabel} → ${st.name} (${TOOL_KITS[req.kind].label})`, [
         ...T.take,
@@ -1273,7 +1311,7 @@ export class Simulation {
     st.techOnSite = true;
     if (st.state !== 'DOWN') {
       st.state = 'MAINT'; st.maintKind = req.kind;
-      st.repairRemaining = st.repairTotal = req.kind === 'pm' ? (m.pmTime || 90) * (0.8 + this.rand() * 0.4) : 15;
+      st.repairRemaining = st.repairTotal = req.kind === 'pm' ? (m.pmTime || 90) * (0.8 + this.rand() * 0.4) : req.kind === 'tool' ? (this.adaptive?.mode.toolTime ?? 60) * (0.85 + this.rand() * 0.3) : 15;
     }
   }
 
@@ -1282,7 +1320,10 @@ export class Simulation {
     const o = this.orch;
     if (kind === 'repair') { const inc = o.find(`fail:${st.id}`); o.step(inc, 'exec', 'act', `수리 완료 — 건강도 회복`); o.later(0.5, () => o.close(inc, '복구 확인 · 생산 재개 · 인시던트 종료')); }
     else if (kind === 'cal' && st.request?.self) { const inc = o.find(`cal:${st.id}`); o.step(inc, 'cell', 'act', '자율 보정 완료 — 드리프트 0'); o.step(inc, 'orch', 'notify', '결과 통보 수신 (상위 조치 불필요)'); o.close(inc, '셀 자체 해결 · 종료'); }
-    if (kind === 'repair') { st.health = 90 + this.rand() * 10; st.drift = 0; }
+    if (kind === 'tool' || (kind === 'repair' && st.ad?.tool.req)) this.adaptive?.toolChanged(st);   // 공구 파손 수리에는 공구교체 포함
+    if (kind === 'cal') this.adaptive?.recalibrated(st);
+    if (kind === 'tool') { /* 공구교체: 설비 건강도는 그대로 */ }
+    else if (kind === 'repair') { st.health = 90 + this.rand() * 10; st.drift = 0; }
     else if (kind === 'pm') { st.health = 100; st.drift = 0; this.stats.pm++; }
     else { st.drift = 0; st.health = Math.min(100, st.health + 4); this.stats.cal++; }
     st.state = st.item ? (st.done ? 'BLOCKED' : 'BUSY') : 'STARVED';
@@ -1291,7 +1332,7 @@ export class Simulation {
     if (!st.request?.self) this.erp?.maintDone(st);   // Odoo: 정비 완료 (셀 자율 보정은 정비요청 없음)
     st.request = null;
     this.emit('repaired', { st, kind });
-    const label = { repair: '수리 완료', pm: '예지정비 완료', cal: '재보정 완료' }[kind];
+    const label = { repair: '수리 완료', pm: '예지정비 완료', cal: '재보정 완료', tool: '공구교체 완료 (툴 프리셋·더미가공 확인)' }[kind];
     this.log('ok', `${st.name} ${label}`, { obs: `건강도 ${st.health.toFixed(0)}% 회복, 라인 재가동` });
   }
 

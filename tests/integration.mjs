@@ -14,7 +14,7 @@ const s = new Simulation('dark', 2, { line: zoneLine(), quiet: true }), ag = new
 hub.reset(s, null);
 const run = (sec) => { for (let t = 0; t < sec; t += 0.1) { s.step(0.1); ag.update(0.1); } };
 run(1800);
-const st = s.processing.find((x) => x.id === 'EA_FAST'); s.injectFault(st); run(240);
+const st = s.processing.find((x) => x.id === 'RC_TURN'); s.injectFault(st); run(240);
 s.disruptSupply?.(300); run(400);
 
 console.log('== 진화 컨셉');

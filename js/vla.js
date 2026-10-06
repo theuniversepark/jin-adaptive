@@ -36,7 +36,7 @@ function phaseOf(u) { return u < 0.1 ? 'approach' : u < 0.3 ? 'grasp' : u < 0.55
 const ammrPhase = (a) => (!a ? 'assemble' : a.phase === 'turnOut' || a.phase === 'driveOut' ? 'approach' : a.phase === 'pick' ? 'grasp' : a.phase === 'turnIn' || a.phase === 'driveIn' ? 'transport' : a.carry ? 'insert' : 'assemble');
 function instruction(st, kind, product, color, lead = true) {
   if (!lead) return `${st.type === 'pack' ? '포장' : '분류'} 게이트 결정에 따라 작업물을 양팔로 잡아 고정하고 ${st.type === 'pack' ? '라벨을 붙여라' : 'ID 태그를 달아라'} (보조)`;
-  const prod = product === 'eaxle' ? 'e-axle' : product === 'doortrim' ? '도어트림' : '제품';
+  const prod = product === 'rcover' ? '리어커버' : product === 'hblock' ? '유압블록' : '제품';
   const verb = st.type === 'screw' || st.type === 'fasten' ? '체결' : st.type === 'sort' ? '분류' : st.type === 'pack' ? '포장' : '조립';
   if (kind === 'humanoid') return `머리 카메라로 피더의 부품을 확인하고 양손으로 집어 AMR 위 ${prod}에 ${verb}하라`;
   return kind === 'ammr' ? `옆 선반으로 이동해 양팔로 부품을 집어 와 ${prod}에 ${verb}하라` : `선반의 ${color} 부품을 집어 AMR 위 ${prod}에 ${verb}하라`;

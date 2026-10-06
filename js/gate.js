@@ -32,7 +32,7 @@ export function evaluate(a, sim, agent) {
   const reject = (reason, alt) => ({ checks, verdict: 'reject', reason, alt, summary: describe(a, sim) });
   if (!a || a.type === 'unknown') {
     add('parse', 'fail', `"${a?.clause ?? ''}" — 알아들을 수 있는 공정 지시가 아닙니다`);
-    return reject('지시를 해석하지 못함', '예: 포장셀 속도 75% · 도어트림 2:1 · e-axle 조립셀 예방정비');
+    return reject('지시를 해석하지 못함', '예: 포장셀 속도 75% · 유압블록 2:1 · 리어커버 조립셀 예방정비');
   }
   add('parse', 'pass', `"${a.clause}" → ${describe(a, sim)}`);
   if (a.type === 'status') {
@@ -79,7 +79,7 @@ export function evaluate(a, sim, agent) {
     add('safety', 'pass', '정지 명령과 무관 (투입 순서만 변경)');
     if (sim.line.mix === a.mix) { add('feasible', 'fail', `이미 ${ZONE_MIXES[a.mix].label}`); return reject('변경 없음 — 이미 같은 비율', null); }
     add('feasible', a.note ? 'warn' : 'pass', a.note ?? '지원하는 비율');
-    add('impact', 'warn', `다음 투입부터 ${ZONE_MIXES[a.mix].label} · 라인 안 재공은 그대로${a.mix === 'dt' || a.mix === 'ea' ? ' · 다른 제품 라인은 비게 됨' : ''}`);
+    add('impact', 'warn', `다음 투입부터 ${ZONE_MIXES[a.mix].label} · 라인 안 재공은 그대로${a.mix === 'hb' || a.mix === 'rc' ? ' · 다른 제품 라인은 비게 됨' : ''}`);
     return { checks, verdict: 'approve', summary: describe(a, sim) };
   }
 

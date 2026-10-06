@@ -49,7 +49,7 @@ app.whenReady().then(async () => {
   const D = (sel) => `document.querySelector('${sel}')`;
   // 정보 창 (로봇: AMR · 셀 로봇, 설비)
   await testPopup('로봇 정보 창 (AMR)', () => js(`(()=>{ const t=window.__twin; t.view.selectRobot({type:'mover', id:'AMR-03'}); t.ui.showRobot(); })()`), D('#detail'), () => js(`window.__twin.ui.hideDetail(); window.__twin.view.selectRobot(null)`));
-  await testPopup('로봇 정보 창 (셀 로봇)', () => js(`(()=>{ const t=window.__twin; t.view.selectRobot({type:'cell', stationId:'DT_ASSY', idx:0}); t.ui.showRobot(); })()`), D('#detail'), () => js(`window.__twin.ui.hideDetail(); window.__twin.view.selectRobot(null)`));
+  await testPopup('로봇 정보 창 (셀 로봇)', () => js(`(()=>{ const t=window.__twin; t.view.selectRobot({type:'cell', stationId:'HB_MILL', idx:0}); t.ui.showRobot(); })()`), D('#detail'), () => js(`window.__twin.ui.hideDetail(); window.__twin.view.selectRobot(null)`));
   await testPopup('설비 정보 창', () => js(`(()=>{ const t=window.__twin; t.ui.showDetail(t.sim.processing[3]); })()`), D('#detail'), () => js(`window.__twin.ui.hideDetail()`));
   await testPopup('CCTV 영상 창', async () => { await clickId('btnCctv'); await js(`document.getElementById('cctvOpen')?.click()`); }, D('#cctvPanel'), async () => { await js(`document.getElementById('cctvClose').click()`); await clickId('btnCctv'); });
   await testPopup('CCTV 카드', () => clickId('btnCctv'), D('#cctvCard'), () => clickId('btnCctv'));

@@ -59,7 +59,7 @@ export class UI {
     const kpi = (label, val, unit = '', sub = '', cls = '') =>
       `<div class="kpi ${cls}"><div class="k">${label}</div><div class="v">${val}<small>${unit}</small></div>${sub ? `<div class="s">${sub}</div>` : ''}</div>`;
     $('kpis').innerHTML = [
-      kpi('양품 생산', num(k.good), '개', sim.zone ? `도어트림 ${num(sim.stats.goodBy.doortrim ?? 0)} · e-axle ${num(sim.stats.goodBy.eaxle ?? 0)}` : `출하 ${num(k.shipped)}개`),
+      kpi('양품 생산', num(k.good), '개', sim.zone ? `유압블록 ${num(sim.stats.goodBy.hblock ?? 0)} · 리어커버 ${num(sim.stats.goodBy.rcover ?? 0)}` : `출하 ${num(k.shipped)}개`),
       kpi('시간당 생산', num(k.uphRecent), 'UPH', `누적 평균 ${num(k.uph)}`),
       `<div class="kpi wide"><div class="k">설비종합효율 OEE</div><div class="v">${pct(k.OEE)}</div>
         ${top ? `<div class="imp-top1">손실 1위 ${top.label} −${(top.oeePts * 100).toFixed(1)}%p · UPH −${Math.round(top.uph)}</div>` : ''}
@@ -81,7 +81,7 @@ export class UI {
     $('agentCount').textContent = this.agent.decisions;
     this.renderEngine();
     $('thought').innerHTML = this.llm?.enabled
-      ? `<b>운영</b> · ${this.agent.arch === 'hybrid' ? (() => { const H = this.agent.status(); return `혼합형 다중 에이전트 — 정비·품질·흐름 에이전트 제안 ${H.proposed} · 메인 승인 ${H.approved} · 보류 ${H.deferred} · 충돌 ${H.conflicts} · 평균 지연 ${H.avgLat.toFixed(1)}초`; })() : '추론 기반 에이전트가 정비·품질·흐름·물류를 계속 판단합니다'} — ${this.agent.lastThought}<br><b>대화</b> · 입력창 지시를 해석해 공정에 반영합니다 (예: 포장셀 속도 75% · 도어트림 2:1 · e-axle 조립셀 예방정비)`
+      ? `<b>운영</b> · ${this.agent.arch === 'hybrid' ? (() => { const H = this.agent.status(); return `혼합형 다중 에이전트 — 정비·품질·흐름 에이전트 제안 ${H.proposed} · 메인 승인 ${H.approved} · 보류 ${H.deferred} · 충돌 ${H.conflicts} · 평균 지연 ${H.avgLat.toFixed(1)}초`; })() : '추론 기반 에이전트가 정비·품질·흐름·물류를 계속 판단합니다'} — ${this.agent.lastThought}<br><b>대화</b> · 입력창 지시를 해석해 공정에 반영합니다 (예: 포장셀 속도 75% · 유압블록 2:1 · 리어커버 조립셀 예방정비)`
       : sim.mode.agentActive
       ? `<b>현재 판단</b> · ${this.agent.lastThought}`
       : '<b>수동 운영</b> · 설비 데이터가 수집되지 않아 고장·자재 부족을 사람이 발견한 뒤에 대응합니다.';

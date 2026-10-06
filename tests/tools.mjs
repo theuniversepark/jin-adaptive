@@ -22,7 +22,7 @@ for (const [type, label] of [['leak', '바닥 누유'], ['debris', '바닥 이�
 }
 { const s = new Simulation('dark', 2, { line: zoneLine(), quiet: true }), ag = new FactoryAgent(s);
   run(s, ag, 60);
-  const st = s.processing.find((x) => x.id === 'DT_ASSY'); s.injectFault(st);
+  const st = s.processing.find((x) => x.id === 'HB_MILL'); s.injectFault(st);
   let took = null, onSite = false;
   run(s, ag, 300, () => { const t = s.techs.find((m) => m.tool === 'repair'); if (t) { took = t; if (st.techOnSite) onSite = true; } });
   check('설비 고장: 정비 휴머노이드가 수리 공구 세트를 챙겨 출동 · 수리', !!took && onSite, took?.id ?? '출동 없음');
@@ -33,7 +33,7 @@ for (const [type, label] of [['leak', '바닥 누유'], ['debris', '바닥 이�
   let fx = null; run(s, ag, 200, () => { fx ??= s.techs.find((m) => m.tool === 'smoke'); });
   check('연기 의심: 사족보행 열화상 점검 + 대기 중 정비 휴머노이드가 소화기 챙겨 현장 대기 · 반납', !!fx && s.techs.every((m) => m.tool !== 'smoke'), fx?.id ?? '대기 휴머노이드 없음'); }
 { const s = new Simulation('smart', 2, { line: zoneLine(), quiet: true }), ag = new FactoryAgent(s);
-  run(s, ag, 30); const st = s.processing.find((x) => x.id === 'EA_ASSY'); s.injectFault(st);
+  run(s, ag, 30); const st = s.processing.find((x) => x.id === 'RC_MILL'); s.injectFault(st);
   let took = null; run(s, ag, 300, () => { took ??= s.techs.find((m) => m.tool === 'repair'); });
   check('자동화(정비원): 정비원도 수리 공구 세트를 챙겨 출동', !!took && took.kind === 'human', took?.id ?? '출동 없음'); }
 console.log('== 구분 적재장 · 휴머노이드 충전 도크');

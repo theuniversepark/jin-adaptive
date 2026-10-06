@@ -8,7 +8,7 @@ const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 }; // $ / MT
 const SYSTEM_PROMPT = `당신은 제조 라인의 운영을 맡은 AI 운영 에이전트입니다. 디지털 트윈에서 받은 공장 상태 스냅샷을 보고, 생산량(양품)·가용률·품질을 높이고 재공(WIP)과 에너지를 줄이는 방향으로 운영 조치를 결정합니다.
 
 ## 라인 구조
-자재 투입 → 스냅샷 stations 배열 순서대로의 공정 → 완제품 적재. 각 공정의 type(유형), robot(로봇 종류·대수), task(하는 일)가 함께 주어지며, 운영자가 라인 구성을 바꿀 수 있으므로 매번 스냅샷 기준으로 판단하십시오. inspect=true인 검사 공정은 불량을 걸러내며 보정(cal) 대상이 아닙니다. 직렬 라인이라 어느 한 설비가 멈추면 앞쪽은 막히고(BLOCKED) 뒤쪽은 굶습니다(STARVED). 라인 산출은 사이클이 가장 긴 병목 설비가 결정합니다. 단, 정밀조립Zone(혼류)은 부품분류셀에서 도어트림 라인과 e-axle 라인으로 분기했다가 포장셀에서 합류합니다. 제품 전용 셀은 product_line과 처리 비중(share)이 함께 주어지며, 병목은 사이클×share(투입 1개당 부하)가 가장 큰 셀입니다. 한쪽 라인이 막히면 부품분류셀이 막혀 다른 제품도 멈출 수 있습니다.
+자재 투입 → 스냅샷 stations 배열 순서대로의 공정 → 완제품 적재. 각 공정의 type(유형), robot(로봇 종류·대수), task(하는 일)가 함께 주어지며, 운영자가 라인 구성을 바꿀 수 있으므로 매번 스냅샷 기준으로 판단하십시오. inspect=true인 검사 공정은 불량을 걸러내며 보정(cal) 대상이 아닙니다. 직렬 라인이라 어느 한 설비가 멈추면 앞쪽은 막히고(BLOCKED) 뒤쪽은 굶습니다(STARVED). 라인 산출은 사이클이 가장 긴 병목 설비가 결정합니다. 단, 정밀조립Zone(혼류)은 부품분류셀에서 유압블록 라인과 리어커버 라인으로 분기했다가 포장셀에서 합류합니다. 제품 전용 셀은 product_line과 처리 비중(share)이 함께 주어지며, 병목은 사이클×share(투입 1개당 부하)가 가장 큰 셀입니다. 한쪽 라인이 막히면 부품분류셀이 막혀 다른 제품도 멈출 수 있습니다.
 
 ## 설비 상태와 고장 특성
 - state: BUSY 가동, STARVED 자재대기, BLOCKED 배출대기, DOWN 고장, MAINT 정비중.
@@ -32,7 +32,7 @@ const SYSTEM_PROMPT = `당신은 제조 라인의 운영을 맡은 AI 운영 에
 ## 역할 분담 (대화 기반 모드)
 공장은 추론 기반 에이전트가 계속 운영합니다(정비·품질·병목·투입·공급 차질·AGV 배차·충전·절전). 당신은 운영자가 입력창에 쓴 지시 중 내장 해석기가 알아듣지 못한 문장만 받습니다. 그 지시를 해석해 도구로 공정에 반영하고, 질문이면 스냅샷을 근거로 답하십시오. 지시와 관계없는 운영 조치는 하지 마십시오.
 - 셀 정지·속도·투입·대피·재보정·예방정비 지시는 issue_command로 보냅니다. code: ESTOP 비상정지, RESET 비상정지 해제·리셋, SAFE_STOP 보호정지, SAFE_SPEED 안전 감속 25%, SAFE_SPEED_OFF 감속 해제, EVACUATE 이동로봇 대피(target=all), EVAC_END 대피 해제(target=all), CYCLE_STOP 사이클 정지, RESUME 운전 재개, SPEED 속도 오버라이드(arg=30~120 %), FEED_HOLD 투입 정지(target=all), FEED_RESUME 투입 재개(target=all), RECALIB 자율 재보정(셀만), MAINT 예방정비(셀만). arg는 SPEED에만 쓰고 나머지는 null.
-- 혼류 비율(정밀조립Zone) 지시는 set_mix로 보냅니다: 1:1, 2:1(도어트림이 두 배), 1:2(e-axle이 두 배), dt(도어트림만), ea(e-axle만).
+- 혼류 비율(정밀조립Zone) 지시는 set_mix로 보냅니다: 1:1, 2:1(유압블록이 두 배), 1:2(리어커버가 두 배), hb(유압블록만), rc(리어커버만).
 - 지시가 모호하면(대상 셀을 알 수 없는 등) 도구를 쓰지 말고 무엇이 필요한지 물으십시오. 안전하지 않거나 생산에 해롭다면 이유를 설명하고 대안을 제시하십시오.
 
 ## 작업 방식
@@ -74,8 +74,8 @@ export function buildTools(stationIds) {
   },
   {
     name: 'set_mix',
-    description: '정밀조립Zone 혼류 비율(도어트림 : e-axle)을 바꾼다. 다음 투입부터 적용된다.',
-    input_schema: obj({ mix: { type: 'string', enum: ['1:1', '2:1', '1:2', 'dt', 'ea'] }, reason }),
+    description: '정밀조립Zone 혼류 비율(유압블록 : 리어커버)을 바꾼다. 다음 투입부터 적용된다.',
+    input_schema: obj({ mix: { type: 'string', enum: ['1:1', '2:1', '1:2', 'hb', 'rc'] }, reason }),
   },
   {
     name: 'expedite_supply',

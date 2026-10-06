@@ -91,7 +91,7 @@ export class TruckYard {
       t.go([{ x: bx, z: YARD.roadZ + 3 }, { x: bx + 4, z: YARD.roadZ }, { x: 90, z: YARD.roadZ }], 'depart');
       t.bay = null; t.bayLeft = bx;
       s.stats.trucks = (s.stats.trucks ?? 0) + 1; s.erp?.shipDone(t);   // Odoo: 출고 확정
-      const mix = Object.entries(t.by).map(([k, v]) => `${k === 'doortrim' ? '도어트림' : k === 'eaxle' ? 'e-axle' : k} ${v}`).join(' · ');
+      const mix = Object.entries(t.by).map(([k, v]) => `${k === 'hblock' ? '유압블록' : k === 'rcover' ? '리어커버' : k} ${v}`).join(' · ');
       s.log('ok', `${t.id} 만재 출발`, { obs: `적재 ${t.load}/${YARD.cap}개${mix ? ` (${mix})` : ''}`, act: `도크 ${this.bayNo(bx)} 비움 → 대기 트럭 접안` });
     }
   }
@@ -103,7 +103,7 @@ export function planForklift(sim, f) {
   const trigger = m.key === 'traditional' ? 16 : YARD.pallet;   // 레거시는 많이 쌓인 뒤에야 움직인다 (작업자 판단)
   let product = null, avail;
   if (sim.zone) {
-    const p = ['doortrim', 'eaxle'].filter((k) => sim.fgBy[k] >= trigger).sort((a, b) => sim.fgBy[b] - sim.fgBy[a])[0];
+    const p = ['hblock', 'rcover'].filter((k) => sim.fgBy[k] >= trigger).sort((a, b) => sim.fgBy[b] - sim.fgBy[a])[0];
     if (!p) return false;
     product = p; avail = sim.fgBy[p];
   } else {
@@ -114,11 +114,11 @@ export function planForklift(sim, f) {
   const n = Math.min(avail, YARD.pallet, YARD.cap - t.load - (t.reserved ?? 0));
   if (n <= 0) return false;
   t.reserved = (t.reserved ?? 0) + n;
-  const pick = product === 'eaxle' ? sim.loc.PICK_EA : sim.loc.PICK_DT;
+  const pick = product === 'rcover' ? sim.loc.PICK_EA : sim.loc.PICK_DT;
   // 도크 앞(벽에서 2.6m)에서 트럭 쪽을 보고 서서 포크를 적재함 높이로 올린 뒤 들어가고, 내려놓으면 포크를 넣은 채 반듯이 후진해 나온 뒤 돈다
   const bx = t.bay, dock = { x: bx, z: YARD.wallZ + 2.6, aisle: 'B', name: `출하 도크 ${yard.bayNo(bx)}` };
   const inside = { x: bx, z: YARD.wallZ + 0.7, aisle: 'B', name: `${t.id} 적재함` };   // 도크 레벨러 끝에서 포크를 적재함에 넣어 내려놓는다
-  const pName = product === 'eaxle' ? 'e-axle' : product === 'doortrim' ? '도어트림' : '완제품';
+  const pName = product === 'rcover' ? '리어커버' : product === 'hblock' ? '유압블록' : '완제품';
   f.setTask(`${pName} 출하 → ${t.id}`, [
     { go: pick },
     { wait: m.key === 'traditional' ? 8 : 5, done: () => {

@@ -123,7 +123,7 @@ const archPref = {};   // 단계별 운영자 선택 (없으면 MODES[단계].ag
 let modeKey = 'smart', speed = 3, running = true, labelsOn = true;
 const SEED = 20261001;
 
-// 공정 라인 구성 — 정밀조립Zone 두 시나리오(도어트림·e-axle)와 사용자 라인을 각각 저장해 다음 실행 때도 유지
+// 공정 라인 구성 — 정밀조립Zone 두 시나리오(유압블록·리어커버)와 사용자 라인을 각각 저장해 다음 실행 때도 유지
 // v4: 정밀조립Zone이 혼류(분기·합류) 구조로 바뀌어 이전 Zone 레시피는 버리고 사용자 라인만 옮긴다
 // v5: 부품분류셀 기본 로봇이 SCARA → AMMR(AMR 기반 양팔 로봇)로 바뀌어 이전 Zone 레시피는 버린다
 // v6: 포장셀 기본 로봇도 AMMR로 바뀌어 이전 Zone 레시피는 버린다
@@ -247,14 +247,14 @@ function renderZoneCard() {
   if (zone) {
     const mixSeg = Object.entries(ZONE_MIXES).map(([k, m]) => `<button data-mix="${k}" class="${k === currentLine.mix ? 'on' : ''}">${escH(m.label)}</button>`).join('');
     const cellRow = (id) => { const c = ZONE_CELLS[id]; return `<div class="zc-cell p-${c.product}" data-cell="${id}"><b>${c.no}</b><span>${escH(c.label)}</span><em>${escH(c.use)}</em><i class="chip" data-chip="${id}"></i></div>`; };
-    body = `<div class="zc-sub">혼류 비율 (도어트림 : e-axle)</div>
+    body = `<div class="zc-sub">혼류 비율 (유압블록 : 리어커버)</div>
       <div class="seg small zc-mix">${mixSeg}</div>
-      <div class="zc-cells">${cellRow('SORT')}
-        <div class="zc-branch"><div class="zc-line p-doortrim"><small>▶ 도어트림 라인 · ${escH(ZONE_PRODUCTS.doortrim.customer)}</small>${cellRow('DT_ASSY')}${cellRow('DT_FAST')}</div>
-        <div class="zc-line p-eaxle"><small>▶ e-axle 라인 · ${escH(ZONE_PRODUCTS.eaxle.customer)}</small>${cellRow('EA_ASSY')}${cellRow('EA_FAST')}</div></div>
-        ${cellRow('PACK')}</div>
+      <div class="zc-cells">${cellRow('MATL')}
+        <div class="zc-branch"><div class="zc-line p-hblock"><small>▶ 유압블록 라인 · ${escH(ZONE_PRODUCTS.hblock.customer)}</small>${cellRow('HB_MILL')}${cellRow('HB_DEBR')}</div>
+        <div class="zc-line p-rcover"><small>▶ 리어커버 라인 · ${escH(ZONE_PRODUCTS.rcover.customer)}</small>${cellRow('RC_MILL')}${cellRow('RC_TURN')}</div></div>
+        ${cellRow('CMM')}</div>
       <div class="zc-amr" id="zcAmr"></div>
-      <div class="zc-flow">투입 → 1.분류 → <span class="t-dt">도어트림 2.조립 → 3.체결</span> / <span class="t-ea">e-axle 4.조립 → 5.체결</span> → 6.포장 → 구분 적재</div>`;
+      <div class="zc-flow">투입 → 1.분류 → <span class="t-dt">유압블록 2.조립 → 3.체결</span> / <span class="t-ea">리어커버 4.조립 → 5.체결</span> → 6.포장 → 구분 적재</div>`;
   } else body = `<div class="zc-sub">${escH(currentLine.name)} · 공정 ${currentLine.stations.length}개 (공정 설계에서 편집)</div>`;
   zoneCard.innerHTML = `<div class="zc-h"><b>${ZONE_NAME}</b><small>메타팩토리 테스트베드 · 6셀 혼류</small></div>
     <div class="seg small" id="slotSeg">${seg}</div>${body}`;
@@ -271,7 +271,7 @@ function updateZoneCard() {
   const n = (k) => sim.carriers.filter((c) => c.state === k).length;
   const g = sim.stats.goodBy;
   const amr = document.getElementById('zcAmr');
-  if (amr) amr.innerHTML = `양품 도어트림 <b>${g.doortrim ?? 0}</b> · e-axle <b>${g.eaxle ?? 0}</b> · 구분 적재 <b>${sim.fgBy.doortrim}</b> / <b>${sim.fgBy.eaxle}</b>`
+  if (amr) amr.innerHTML = `양품 유압블록 <b>${g.hblock ?? 0}</b> · 리어커버 <b>${g.rcover ?? 0}</b> · 구분 적재 <b>${sim.fgBy.hblock}</b> / <b>${sim.fgBy.rcover}</b>`
     + (sim.carriers.length ? `<br>🛻 AMR ${sim.carriers.length}대 · 적재 운반 <b>${n('line')}</b> · 빈차 복귀 <b>${n('return')}</b> · 대기 <b>${n('park') + n('toSrc') + n('docking') + n('atSrc')}</b>` : '<br>셀 간 물류: 고정 컨베이어 (레거시)')
     + `<br>🚚 입고 · 창고 원자재 <b>${sim.whRaw}</b>${sim.partsTracked ? ` · 부품 <b>${sim.whParts}</b>` : ''} · 입고 트럭 <b>${sim.inbound.stats.trucks}</b>대${sim.inbound.docked ? ' · 하차 중' : sim.inbound.trucks.length ? ' · 입차 중' : sim.inbound.orders.length ? ' · 발주됨' : ''}`;
 }
@@ -293,8 +293,8 @@ zoneCard.addEventListener('click', (e) => {
     start(modeKey);
     designer?.sync();
     const w = ZONE_MIXES[currentLine.mix];
-    sim.log('act', `혼류 비율 변경 · 도어트림 : e-axle = ${w.label}`, {
-      obs: `투입 순서를 비율에 맞춰 평준화 (도어트림 ${w.w.doortrim} : e-axle ${w.w.eaxle})`,
+    sim.log('act', `혼류 비율 변경 · 유압블록 : 리어커버 = ${w.label}`, {
+      obs: `투입 순서를 비율에 맞춰 평준화 (유압블록 ${w.w.hblock} : 리어커버 ${w.w.rcover})`,
       dec: '1.부품분류셀이 부품 종류를 판별해 제품별 라인으로 분기, 6.포장셀에서 합류',
       act: '시뮬레이션 재시작',
     });
@@ -1403,7 +1403,7 @@ function viewCells() {
   const s = sim, T = Math.max(1, s.time), cells = s.processing.filter((st) => !st.standby);
   const mixW = ZONE_MIXES[s.line.mix]?.w, mixSum = mixW ? Object.values(mixW).reduce((a, b) => a + b, 0) : 0;
   const gates = cells.filter((st) => st.def.type === 'sort' || st.def.type === 'pack');
-  const PCOL = { doortrim: '#f0a030', eaxle: '#9a6bff' };
+  const PCOL = { hblock: '#f0a030', rcover: '#9a6bff' };
   const gateCard = (st) => {
     const c = st.gateCount ?? {}, n = Object.values(c).reduce((a, b) => a + b, 0);
     const rows = Object.keys(ZONE_PRODUCTS).map((p) => [`${ZONE_PRODUCTS[p].label} ${n ? pct((c[p] ?? 0) / n) : '-'}${mixSum ? ` (목표 ${pct((mixW[p] ?? 0) / mixSum)})` : ''}`, c[p] ?? 0, PCOL[p]]);

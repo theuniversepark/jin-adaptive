@@ -29,7 +29,7 @@ export function equipmentList(sim, view = null) {
   });
   const arms = view?.stationViews?.find((v) => v.st === sink)?.parts.arms;
   (sim.sinkRobotUids ?? []).forEach((uid, i) => {
-    const A = arms?.[i ? 'eaxle' : 'doortrim'], name = `적재 로봇 (${i ? 'e-axle' : '도어트림'})`;
+    const A = arms?.[i ? 'rcover' : 'hblock'], name = `적재 로봇 (${i ? '리어커버' : '유압블록'})`;
     if (legacy) return add(uid, name, '셀 로봇', '수작업 대체', 'off');
     if (halted) return add(uid, name, '셀 로봇', '정지 (명령)', 'stop');
     add(uid, name, '셀 로봇', A?.cyc ? '적재 중' : '대기', A?.cyc ? 'run' : 'idle');

@@ -342,7 +342,7 @@ export class RobotTelemetry {
       if (m.kind === 'agv') sens.push(['적재', m.load ? `${m.load.type === 'raw' ? '자재' : '완제품'} ${m.load.n}개` : '없음']);
       if (m.kind === 'carrier') {
         const item = sim.itemOfCarrier?.(m);
-        sens.push(['리프트 높이', `${(0.9 * 1000).toFixed(0)} mm`], ['탑재물', item ? (item.scrap ? '없음 (불량 배출 후)' : `${item.product === 'doortrim' ? '도어트림' : 'e-axle'} #${item.id}`) : '없음'],
+        sens.push(['리프트 높이', `${(0.9 * 1000).toFixed(0)} mm`], ['탑재물', item ? (item.scrap ? '없음 (불량 배출 후)' : `${item.product === 'hblock' ? '유압블록' : '리어커버'} #${item.id}`) : '없음'],
           ['운행 상태', m.state === 'line' ? (m.lineInfo?.where === 'cell' ? '셀 내부' : '셀 간 운반') : { park: '대기열', toSrc: '투입 위치로 이동', docking: '투입 위치 진입', atSrc: '적재 대기', return: '빈차 복귀' }[m.state] ?? m.state],
           ...(m.state === 'line' && m.lineInfo ? [['현재 구간', m.lineInfo.phase],
             ...(m.lineInfo.where === 'path' ? [['구간 진행', `${m.lineInfo.s.toFixed(1)} / ${m.lineInfo.len.toFixed(1)} m`]] : [])] : []));

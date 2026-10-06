@@ -5,19 +5,20 @@
 import { COMMANDS } from './commands.js';
 import { ZONE_MIXES } from './line.js';
 
-// 정밀조립Zone 셀 별칭 (다른 라인은 설비 이름으로 찾는다)
+// 적응가공Zone 셀 별칭 (다른 라인은 설비 이름으로 찾는다)
+const HB = '(유압\\s*(제어\\s*)?블록|블록)', RC = '(리어\\s*커버|커버)';
 const CELL_ALIASES = [
-  [/부품\s*분류|분류\s*셀|소팅/, 'SORT'],
-  [/도어\s*트림\s*(조립)/, 'DT_ASSY'],
-  [/도어\s*트림\s*(체결|스크류|나사)/, 'DT_FAST'],
-  [/(e-?\s*axle|이\s*액슬|이\s*엑슬)\s*(조립)/i, 'EA_ASSY'],
-  [/(e-?\s*axle|이\s*액슬|이\s*엑슬)\s*(체결)/i, 'EA_FAST'],
-  [/포장/, 'PACK'],
+  [/소재\s*(식별|측정)|3d\s*(측정|스캔)|스캔\s*셀|식별\s*셀/i, 'MATL'],
+  [new RegExp(`${HB}.*(5축|가공셀|밀링|머시닝)`), 'HB_MILL'],
+  [new RegExp(`${HB}.*(사선|디버링|세척)`), 'HB_DEBR'],
+  [new RegExp(`${RC}.*(절삭|5축|밀링|머시닝)`), 'RC_MILL'],
+  [new RegExp(`${RC}.*(선삭|터닝|품질)`), 'RC_TURN'],
+  [/cmm|측정\s*셀|리워크|초정밀/i, 'CMM'],
 ];
 const ALL_RE = /전체|모든|모두|공장|라인\s*전|zone|존\s*전체|전\s*셀/i;
 const norm = (s) => s.replace(/\s+/g, '').toLowerCase();
 
-export const DIALOG_EXAMPLES = ['포장셀 속도 75%', '도어트림 2:1로 생산', 'e-axle 조립셀 예방정비', '투입 정지', '전체 보호정지', '부품분류셀 상태 어때?'];
+export const DIALOG_EXAMPLES = ['CMM 측정셀 속도 75%', '유압블록 2:1로 생산', '리어커버 선삭셀 예방정비', '투입 정지', '전체 보호정지', '유압블록 5축 가공셀 상태 어때?'];
 
 // 문장에서 대상 셀(id) 또는 'all'을 찾는다
 function findTarget(text, sim) {
@@ -35,18 +36,18 @@ function parseClause(text, sim) {
   const pct = text.match(/(\d{2,3})\s*(%|퍼센트|프로)/);
   // 혼류 비율 (제품 이름이 들어간 비율·전용 생산)
   const ratio = text.match(/(\d)\s*(?::|대|to)\s*(\d)/i);
-  if (sim.zone && (ratio && /비율|혼류|도어\s*트림|e-?\s*axle|이\s*액슬|생산/i.test(text))) {
+  if (sim.zone && (ratio && /비율|혼류|블록|커버|생산/i.test(text))) {
     let [a, b] = [+ratio[1], +ratio[2]];
-    if (/(e-?\s*axle|이\s*액슬).*(도어\s*트림)/i.test(text) && !/(도어\s*트림).*(e-?\s*axle|이\s*액슬)/i.test(text)) [a, b] = [b, a];   // "e-axle 2 : 도어트림 1"
+    if (/커버.*블록/.test(text) && !/블록.*커버/.test(text)) [a, b] = [b, a];   // "리어커버 2 : 유압블록 1"
     const key = a === b ? '1:1' : a > b ? '2:1' : '1:2';
     out.push({ type: 'mix', mix: key, note: a !== b && Math.max(a, b) / Math.min(a, b || 1) !== 2 ? `요청 ${a}:${b} → 가장 가까운 ${ZONE_MIXES[key].label}` : null });
     return out;
   }
-  if (sim.zone && /(도어\s*트림)\s*(만|전용)/.test(text)) { out.push({ type: 'mix', mix: 'dt' }); return out; }
-  if (sim.zone && /(e-?\s*axle|이\s*액슬)\s*(만|전용)/i.test(text)) { out.push({ type: 'mix', mix: 'ea' }); return out; }
+  if (sim.zone && /블록\s*(만|전용)/.test(text)) { out.push({ type: 'mix', mix: 'hb' }); return out; }
+  if (sim.zone && /커버\s*(만|전용)/.test(text)) { out.push({ type: 'mix', mix: 'rc' }); return out; }
   if (sim.zone && /(반반|균등|같은\s*비율|1\s*대\s*1)/.test(text)) { out.push({ type: 'mix', mix: '1:1' }); return out; }
-  if (sim.zone && /(도어\s*트림).*(더|많이|늘)/.test(text)) { out.push({ type: 'mix', mix: '2:1' }); return out; }
-  if (sim.zone && /(e-?\s*axle|이\s*액슬).*(더|많이|늘)/i.test(text)) { out.push({ type: 'mix', mix: '1:2' }); return out; }
+  if (sim.zone && /블록.*(더|많이|늘)/.test(text)) { out.push({ type: 'mix', mix: '2:1' }); return out; }
+  if (sim.zone && /커버.*(더|많이|늘)/.test(text)) { out.push({ type: 'mix', mix: '1:2' }); return out; }
   // 상태 질의
   if (/상태|어때|어떻|현황|알려|보고|몇\s*개|얼마|확인해/.test(text) && !/정지|멈|정비|보정|속도|투입|대피/.test(text)) { out.push({ type: 'status', target: target ?? 'all' }); return out; }
   // 긴급·제어 명령 (먼저 해제·리셋류를 본다)
@@ -100,7 +101,7 @@ export function applyAction(a, sim, { by = '운영자 대화 지시', onMix, age
       if (!sim.zone) return { ok: false, text: '혼류 비율은 정밀조립Zone 라인에서만 바꿀 수 있습니다' };
       if (sim.line.mix === a.mix) return { ok: true, text: `혼류 비율은 이미 ${ZONE_MIXES[a.mix].label}입니다` };
       sim.setMix(a.mix); onMix?.(a.mix);
-      return { ok: true, text: `혼류 비율 → 도어트림 : e-axle = ${ZONE_MIXES[a.mix].label}${a.note ? ` (${a.note})` : ''} · 다음 투입부터 적용` };
+      return { ok: true, text: `혼류 비율 → 유압블록 : 리어커버 = ${ZONE_MIXES[a.mix].label}${a.note ? ` (${a.note})` : ''} · 다음 투입부터 적용` };
     }
     case 'interval': {
       const s = Math.min(20, Math.max(5, a.seconds));
@@ -125,5 +126,5 @@ export function statusText(sim, target) {
   }
   const k = sim.kpi(), down = sim.processing.filter((s) => s.state === 'DOWN').map((s) => s.name);
   const open = sim.orch.openCount();
-  return `라인: 시간당 ${Math.round(k.uphRecent)}개 · OEE ${(k.OEE * 100).toFixed(1)}% · 재공 ${k.wip}개 · 양품 ${k.good}개${sim.zone ? ` (도어트림 ${sim.stats.goodBy.doortrim ?? 0} · e-axle ${sim.stats.goodBy.eaxle ?? 0})` : ''}${down.length ? ` · 고장 ${down.join(', ')}` : ''}${open ? ` · 진행 중 인시던트 ${open}건` : ''}${sim.zone ? ` · 혼류 ${ZONE_MIXES[sim.line.mix]?.label ?? '1 : 1'}` : ''}`;
+  return `라인: 시간당 ${Math.round(k.uphRecent)}개 · OEE ${(k.OEE * 100).toFixed(1)}% · 재공 ${k.wip}개 · 양품 ${k.good}개${sim.zone ? ` (유압블록 ${sim.stats.goodBy.hblock ?? 0} · 리어커버 ${sim.stats.goodBy.rcover ?? 0})` : ''}${down.length ? ` · 고장 ${down.join(', ')}` : ''}${open ? ` · 진행 중 인시던트 ${open}건` : ''}${sim.zone ? ` · 혼류 ${ZONE_MIXES[sim.line.mix]?.label ?? '1 : 1'}` : ''}`;
 }

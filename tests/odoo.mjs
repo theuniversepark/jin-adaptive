@@ -14,7 +14,7 @@ const check = (name, ok, info = '') => { ok ? pass++ : fail++; console.log(`  ${
 
 const s = new Simulation('dark', 2, { line: zoneLine(), quiet: true }), ag = new FactoryAgent(s);
 for (let t = 0; t < 2 * 3600; t += 0.1) { s.step(0.1); ag.update(0.1); }
-const st = s.processing.find((x) => x.id === 'DT_ASSY'); s.injectFault(st);
+const st = s.processing.find((x) => x.id === 'HB_MILL'); s.injectFault(st);
 for (let t = 0; t < 400; t += 0.1) { s.step(0.1); ag.update(0.1); }
 const E = s.erp; E.closeWindow();
 const S = E.stats(), Q = E.quant, P = E.db.picking;
@@ -22,14 +22,14 @@ const S = E.stats(), Q = E.quant, P = E.db.picking;
 // 진행 중(전표 미확정) 수량: 입고 트럭에서 이미 선반에 넣었지만 아직 입고 확정 전 / 구분 적재장에서 꺼냈지만 출고 확정 전(지게차·출발 전 트럭)
 const pendIn = (k) => P.filter((p) => p.type === 'incoming' && p.state !== 'done').flatMap((p) => p.lines).reduce((a, l) => a + (l.product === k ? l.done : 0), 0);
 const pendOut = (k) => P.filter((p) => p.type === 'outgoing' && p.state !== 'done').flatMap((p) => p.lines).reduce((a, l) => a + (l.product === k ? l.done : 0), 0)
-  + (s.forklifts ?? []).reduce((a, f) => a + (f.load?.type === 'fg' && (f.load.product ?? 'doortrim') === k ? f.load.n : 0), 0);
-const expRaw = s.whRaw - pendIn('raw'), expParts = s.whParts - pendIn('parts'), expDT = s.fgBy.doortrim + pendOut('doortrim'), expEA = s.fgBy.eaxle + pendOut('eaxle');
+  + (s.forklifts ?? []).reduce((a, f) => a + (f.load?.type === 'fg' && (f.load.product ?? 'hblock') === k ? f.load.n : 0), 0);
+const expRaw = s.whRaw - pendIn('raw'), expParts = s.whParts - pendIn('parts'), expDT = s.fgBy.hblock + pendOut('hblock'), expEA = s.fgBy.rcover + pendOut('rcover');
 console.log('== 시뮬레이션 Odoo (피지컬AI 2시간)');
 check('구매오더 = WMS 발주 · 입고 확정 + 진행 중 = 구매오더 수', S.po > 0 && S.receipts + S.poOpen === S.po && S.receipts >= s.inbound.stats.trucks - 1 && S.poOpen === s.inbound.orders.length + [...E.byTruck.values()].filter((r) => !r.po.received).length, `구매오더 ${S.po}건 · 입고 확정 ${S.receipts} · 진행 중 ${S.poOpen} · ${(S.amount / 1e6).toFixed(1)}백만원`);
 check('입고 수량 = 입고 트럭이 내린 수량 (원자재·부품)', P.filter((p) => p.type === 'incoming').flatMap((p) => p.lines).reduce((a, l) => a + (l.product === 'raw' ? l.done : 0), 0) === s.inbound.stats.raw && P.filter((p) => p.type === 'incoming').flatMap((p) => p.lines).reduce((a, l) => a + (l.product === 'parts' ? l.done : 0), 0) === s.inbound.stats.parts, `원자재 ${s.inbound.stats.raw} · 부품 ${s.inbound.stats.parts}`);
 check('물류 선반 재고 = 시뮬레이션 창고 재고 − 입고 확정 전 수량', Q.rackRaw.raw === expRaw && Q.rackParts.parts === expParts, `원자재 ${Q.rackRaw.raw} (창고 ${s.whRaw} − 확정 전 ${pendIn('raw')}) · 부품 ${Q.rackParts.parts}`);
-check('구분 적재장 재고 = 시뮬레이션 적재 + 출고 확정 전(지게차·출발 전 트럭)', Q.output.doortrim === expDT && Q.output.eaxle === expEA, `도어트림 ${Q.output.doortrim} (적재 ${s.fgBy.doortrim} + ${pendOut('doortrim')}) · e-axle ${Q.output.eaxle}`);
-check('출고 확정 수량 = 출하 트럭 상차 수량', Q.customer.doortrim + Q.customer.eaxle === s.stats.shipped - P.filter((p) => p.type === 'outgoing' && p.state !== 'done').flatMap((p) => p.lines).reduce((a, l) => a + l.done, 0), `출고 ${S.deliveries}건 · ${Q.customer.doortrim + Q.customer.eaxle}개`);
+check('구분 적재장 재고 = 시뮬레이션 적재 + 출고 확정 전(지게차·출발 전 트럭)', Q.output.hblock === expDT && Q.output.rcover === expEA, `유압블록 ${Q.output.hblock} (적재 ${s.fgBy.hblock} + ${pendOut('hblock')}) · 리어커버 ${Q.output.rcover}`);
+check('출고 확정 수량 = 출하 트럭 상차 수량', Q.customer.hblock + Q.customer.rcover === s.stats.shipped - P.filter((p) => p.type === 'outgoing' && p.state !== 'done').flatMap((p) => p.lines).reduce((a, l) => a + l.done, 0), `출고 ${S.deliveries}건 · ${Q.customer.hblock + Q.customer.rcover}개`);
 check('재고 보존: 모든 로케이션 원자재·부품 합 = 기초 + 확정 입고', Object.values(Q).reduce((a, q) => a + q.raw + q.parts, 0) === 200 + 1200 + s.inbound.stats.raw + s.inbound.stats.parts - pendIn('raw') - pendIn('parts'));
 check('내부 이동(AGV·휴머노이드 출고)·생산 입고가 10분 단위 전표', S.internals > 5 && S.productions > 5, `내부 이동 ${S.internals} · 생산 입고 ${S.productions}`);
 const corr = E.db.mr.filter((m) => m.type === 'corrective'), prev = E.db.mr.filter((m) => m.type === 'preventive');
@@ -49,7 +49,7 @@ for (const version of ['17.0', '18.0']) {
   const st2 = G.odooStatus();
   check(`Odoo ${version}: 로그인 · 이벤트 ${E.pending().length}건 모두 적용 (실패 0)`, !err && res.applied === E.pending().length && st2.failed === 0, err ?? st2.lastError ?? `구매오더 ${st2.created['purchase.order'] ?? 0} · 전표 ${st2.created['stock.picking'] ?? 0} · 정비요청 ${st2.created['maintenance.request'] ?? 0}`);
   const raw = fake.stockAt('물류선반-원자재', 'RM-BOX'), parts = fake.stockAt('물류선반-부품', 'PT-KIT'), dt = fake.stockAt('구분적재장', 'FG-DT'), ea = fake.stockAt('구분적재장', 'FG-EA');
-  check(`Odoo ${version}: Odoo 재고 = 시뮬레이션 Odoo 재고 (선반 원자재·부품, 구분 적재장)`, raw === Q.rackRaw.raw && parts === Q.rackParts.parts && dt === Q.output.doortrim && ea === Q.output.eaxle, `원자재 ${raw} · 부품 ${parts} · 도어트림 ${dt} · e-axle ${ea}`);
+  check(`Odoo ${version}: Odoo 재고 = 시뮬레이션 Odoo 재고 (선반 원자재·부품, 구분 적재장)`, raw === Q.rackRaw.raw && parts === Q.rackParts.parts && dt === Q.output.hblock && ea === Q.output.rcover, `원자재 ${raw} · 부품 ${parts} · 유압블록 ${dt} · 리어커버 ${ea}`);
   const pos = [...fake.T['purchase.order'].values()], mrs = [...(fake.T['maintenance.request']?.values() ?? [])];
   check(`Odoo ${version}: 구매오더 확정 · 정비요청 단계(완료) · 재주문 규칙 · 설비`, pos.length === S.po && pos.every((p) => p.state === 'purchase') && mrs.length === E.db.mr.length && mrs.filter((m) => m.stage_id?.[0] && fake.T['maintenance.stage'].get(m.stage_id[0]).done).length === E.db.mr.filter((m) => m.stage === 'done').length && fake.T['stock.warehouse.orderpoint'].size === 2 && fake.T['maintenance.equipment'].size === S.equipment);
   fake.close();
