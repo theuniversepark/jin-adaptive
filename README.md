@@ -3,6 +3,8 @@
 정밀조립 존 시뮬레이터 [jin-3d](https://github.com/theuniversepark/jin-3d)와 같은 플랫폼 위에 **적응가공 존**을 올린 3D 운영 시뮬레이션임.
 같은 Zone을 **레거시 → 자동화 → 피지컬AI 자율** 3단계로 바꿔 가며 운영하고, 적응가공의 핵심인 **가공–측정–판정–보정–재가공 폐루프**를 눈으로 확인할 수 있음.
 
+**▶ 웹 버전 바로 실행: https://theuniversepark.github.io/jin-adaptive/** (설치 없이 브라우저에서 실행 · Claude 연동과 MQTT 발행은 맥 앱 또는 `npm start`에서)
+
 - 설계 근거·셀 구성·폐루프 규칙·미확정 사항: [docs/ADAPTIVE_ZONE_DESIGN.md](docs/ADAPTIVE_ZONE_DESIGN.md)
 - 공통 플랫폼 기능(오케스트레이터 · CCTV · 5G · ERP · AAS · VLA · AIOS 등) 설명: [docs/PLATFORM.md](docs/PLATFORM.md)
 
