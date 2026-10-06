@@ -65,6 +65,13 @@ function buildAssets(sim, view) {
         f('Failures', '고장 누적', 'int', 'count', () => st.c.fails),
         f('QueueLength', '대기열', 'int', 'pcs', () => sim.queueLen(st)),
         ...(['sort', 'pack', 'matid', 'cmm'].includes(d.type) ? [f('GateDecision', '게이트 판별 결정', 'string', null, () => (st.item && st.gate?.id === st.item.id ? st.gate.text : '')), f('GateProduct', '게이트 판별 제품', 'string', null, () => (st.item && st.gate?.id === st.item.id ? st.gate.product ?? '' : ''))] : []),
+        // 적응가공 셀 (MTConnect·FOCAS 수집 항목에 대응): 공구 · 가공 신호 · 계통 편차 · Feed/Speed override · 채터
+        ...(st.ad ? [
+          f('ToolName', '공구', 'string', null, () => st.ad.tool.name), f('ToolLife', '공구 잔여수명', 'double', '%', () => st.ad.tool.life), f('ToolPartCount', '공구 사용 개수', 'int', 'pcs', () => st.ad.tool.count),
+          f('SpindleLoad', '스핀들 부하', 'double', '%', () => st.ad.sig.load), f('VibrationRms', '진동 RMS', 'double', 'g', () => st.ad.sig.vib), f('AcousticEmission', 'AE', 'double', 'dB', () => st.ad.sig.ae), f('CuttingForce', '절삭력', 'double', 'N', () => st.ad.sig.force),
+          f('FeedSpeedOverride', 'Feed·Speed override', 'double', '%', () => st.ad.ov * 100), f('DimErrorUm', '계통 치수 편차', 'double', 'um', () => sim.adaptive.errOf(st)), f('ToolOffsetUm', '공구 오프셋 보정', 'double', 'um', () => st.ad.offset),
+        ] : []),
+        ...(d.type === 'cmm' ? [f('LastDeviationUm', '최근 측정 편차', 'double', 'um', () => sim.adaptive?.measures.at(-1)?.dev ?? null), f('LastJudgement', '최근 판정', 'string', null, () => sim.adaptive?.measures.at(-1)?.res ?? ''), f('ReworkCount', '리워크 누적', 'int', 'pcs', () => sim.adaptive?.stats.rework ?? 0)] : []),
         f('PartsStock', '부품 재고', 'int', 'pcs', () => st.parts ?? null),
         f('PowerKW', '전력', 'double', 'kW', () => (st.state === 'BUSY' ? d.busyKW : st.state === 'DOWN' || st.state === 'MAINT' ? d.idleKW * 0.5 : st.powerSave ? d.idleKW * 0.3 : d.idleKW)),
       ],

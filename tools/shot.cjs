@@ -19,6 +19,7 @@ app.whenReady().then(async () => {
     zone: [[0, 34, 30], [0, 0, 0]], cells: [[-5, 9, 12], [1, 0, 0]], mill: [[-7.5, 4.2, 8.8], [-5, 1, 3]], millrc: [[-7.5, 4.2, -9.5], [-5, 1, -3]],
     deburr: [[9, 4, 9.5], [7, 1, 4.6]], cmm: [[22, 4.5, 6.5], [18, 1, 0]], matid: [[-21.5, 4.5, 6.5], [-18, 1, 0]], source: [[-31, 6, 9], [-28, 0.5, 0]], sink: [[31, 5, 8], [28, 0.5, 0]], turn: [[9.5, 4.2, -9.5], [7, 1, -3]],
   };
+  if (process.env.SCROLL_LEFT) await js(`(()=>{ const z=document.getElementById("zcAd"); z?.scrollIntoView({block:"end"}); z?.querySelector("details")?.setAttribute("open",""); })()`);
   const pick = which === 'all' ? Object.keys(views) : which.split(',');
   for (const k of pick) {
     const [p, t] = views[k];

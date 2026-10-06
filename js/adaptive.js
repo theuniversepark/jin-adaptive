@@ -13,7 +13,7 @@ export const ADAPT_MODES = {
     label: '고정 NC 프로그램 · 작업자 판단', diagMs: null, ctrlMs: null,
     scan: false, comp: 0, airCut: 0, chatterDetect: false, autoRecover: 0, predictive: false,
     feedback: 'sample', sampleEvery: 24,      // 30분 주기 자주검사(4EA 수기 기록) — 24개마다 한 번 오프셋 수정
-    toolLimit: 0, toolTime: 150, toolWho: '작업자 (공구실 왕복 · 대차 운반)', reworkMul: 1.6,
+    toolLimit: 0, counterN: 30, toolTime: 150, toolWho: '작업자 (공구실 왕복 · 대차 운반)', reworkMul: 1.6,   // 고정 카운터: 실제 마모와 관계없이 30개마다 교체 (가장 빨리 닳는 공구에 맞춘 보수적 주기)
   },
   smart: {
     label: '엣지 AI 진단·보정 (1차년도 KPI)', diagMs: 40, ctrlMs: 50,
@@ -39,19 +39,30 @@ export class AdaptiveControl {
     this.stats = { scanned: 0, chatter: 0, chatterAuto: 0, chatterEsc: 0, chatterMissed: 0, toolChanges: 0, toolBreaks: 0, measured: 0, ok: 0, rework: 0, scrap: 0, comp: 0, savedS: 0, diagSum: 0, ctrlSum: 0, nDiag: 0 };
     this.events = [];   // 최근 폐루프 이벤트 (OCS 패널)
     this.measures = [];  // 최근 측정 결과 (CMM 판정 이력)
-    for (const st of sim.processing) if (st.def.adaptive) {
+    for (const st of sim.processing) if (st.def.adaptive) this.initCell(st);
+  }
+  initCell(st) {
+    const sim = this.sim;
+    {
       st.ad = {
-        tool: { name: TOOLS[st.id] ?? 'T01 엔드밀', life: 70 + sim.rand() * 30, rate: (st.def.type === 'turn' ? 1.6 : 1.9) * (sim.mode.key === 'traditional' ? 1.15 : 1), changes: 0, req: false },
+        tool: { name: TOOLS[st.id] ?? 'T01 엔드밀', life: 70 + sim.rand() * 30, base: st.def.type === 'turn' ? 1.9 : 2.2, rate: 0, count: Math.floor(sim.rand() * 12), changes: 0, req: false },
         bias: (sim.rand() - 0.5) * 8,   // 열변위·기계 오차 (µm, 천천히 떠돈다)
+        warm: 9 + sim.rand() * 6,        // 웜업 평형 열변위 (µm)
         offset: 0,                       // 공구 오프셋 보정값 (µm)
         ov: 1, ovT: 0,                   // Feed·Speed override (채터 보정 중)
         chatterAt: null, attempts: 0,
         sig: { load: 0, vib: 0, ae: 0, force: 0, temp: 22 },
         last: null, n: 0, sinceSample: 0,
       };
+      this.newRate(st);
     }
   }
   get mode() { return this.A; }
+  // 공구마다 실제 마모 속도가 다르다 (소재 로트·공구 품질) — 개당 수명 소모 %
+  newRate(st) { st.ad.tool.rate = st.ad.tool.base * (0.7 + this.sim.rand() * 0.8); }
+  // 교체 대기 중 새 소재를 받지 않는 조건: 적응가공은 실측 수명이 다했을 때, 레거시는 CNC 공구 수명 카운터 알람(개수 도달)일 때
+  // — 레거시는 실제 마모를 모르므로 카운터 전에 빨리 닳는 공구는 그대로 가공하다 파손된다
+  holdForTool(st) { const t = st.ad?.tool; return !!t && t.req && (this.A.predictive ? t.life < 3 : t.count >= this.A.counterN); }
   wearDev(st) { return (100 - st.ad.tool.life) * 0.12; }   // 공구 마모에 따른 치수 편차 (µm)
   errOf(st) { return st.ad.bias + this.wearDev(st) - st.ad.offset; }   // 지금 가공하면 나올 계통 편차
 
@@ -89,7 +100,7 @@ export class AdaptiveControl {
   // 매 스텝: 채터 발생·진단·보정 (진행률이 발생 시점을 지나면)
   tick(st, dt) {
     const ad = st.ad; if (!ad) return;
-    ad.bias += (this.sim.rand() - 0.5) * 0.12 * dt + 0.003 * dt;   // 열변위: 가동 중 천천히 한쪽으로 쏠린다
+    ad.bias += (ad.warm - ad.bias) * dt / 1800 + (this.sim.rand() - 0.5) * 0.12 * dt;   // 열변위: 가동하면 웜업 평형값(약 12µm)으로 30분 시정수로 다가간다
     st.drift = Math.min(1, Math.abs(this.errOf(st)) / 60);         // 기존 SPC·순찰 점검이 보는 드리프트
     if (ad.chatterAt == null || st.state !== 'BUSY' || st.progress < ad.chatterAt) return;
     ad.chatterAt = null;
@@ -98,7 +109,7 @@ export class AdaptiveControl {
     ad.sig.vib *= 2.6; ad.sig.ae += 9; ad.sig.load += 14;
     if (!A.chatterDetect) {   // 레거시: 가공기 내부를 볼 수 없고 진단도 없음 — 떨림이 그대로 가공면에 남는다
       this.stats.chatterMissed++; if (it) { it.chatter = true; it.devAdd = (it.devAdd ?? 0) + 4 + r() * 4; }
-      ad.tool.life = Math.max(0, ad.tool.life - 6);
+      ad.tool.life = Math.max(0, ad.tool.life - 2.5);   // 떨림이 공구 날을 상하게 한다
       this.log(st, 'miss', '채터 발생 — 감지 수단 없음 (가공면 떨림 자국)');
       return;
     }
@@ -136,8 +147,8 @@ export class AdaptiveControl {
   onComplete(st, it) {
     const ad = st.ad; if (!ad || !it || it.scrap) return;
     const r = this.sim.rand, A = this.A;
-    ad.n++;
-    ad.tool.life = Math.max(0, ad.tool.life - ad.tool.rate * (0.7 + r() * 0.6) * ((st.cmd?.override ?? 1) > 1 ? 1.5 : 1) * (A.scan ? 0.85 : 1));
+    ad.n++; ad.tool.count++;
+    ad.tool.life = Math.max(0, ad.tool.life - ad.tool.rate * (0.8 + r() * 0.4) * ((st.cmd?.override ?? 1) > 1 ? 1.5 : 1) * (A.scan ? 0.85 : 1));
     // 소재 편차: 스캔 보정이 남기는 몫만큼 치수에 남는다
     const stockErr = (it.stock ?? 0) * 10 * (1 - A.comp);
     const dev = this.errOf(st) + stockErr + (it.devAdd ?? 0) + gauss(r) * (A.scan ? 2.2 : 3.0) + (100 - st.health) * 0.05;
@@ -153,7 +164,7 @@ export class AdaptiveControl {
       return;
     }
     if (A.predictive && ad.tool.life < A.toolLimit) this.requestTool(st, `공구 수명 ${ad.tool.life.toFixed(0)}% — 예지보전`);
-    else if (!A.predictive && ad.tool.life < 14 && r() < 0.5) this.requestTool(st, '마모 알람 (작업자 확인)');
+    else if (!A.predictive && ad.tool.count >= A.counterN) this.requestTool(st, `CNC 공구 수명 카운터 ${A.counterN}개 도달 (고정 주기 교체 · 남은 수명 ${ad.tool.life.toFixed(0)}%)`);
   }
 
   requestTool(st, why) {
@@ -167,7 +178,8 @@ export class AdaptiveControl {
   }
   toolChanged(st) {
     const ad = st.ad; if (!ad) return;
-    ad.tool.life = 100; ad.tool.changes++; ad.tool.req = false; this.stats.toolChanges++;
+    this.stats.lifeLeft = (this.stats.lifeLeft ?? 0) + ad.tool.life;   // 교체 때 남아 있던 수명 (버려진 공구 수명)
+    ad.tool.life = 100; ad.tool.count = 0; ad.tool.changes++; ad.tool.req = false; this.stats.toolChanges++; this.newRate(st);
     ad.offset = ad.bias;   // 새 공구 길이·지름 측정(툴 프리세터) → 오프셋 재설정, 더미가공 확인
     this.log(st, 'tool', `공구교체 완료 · 툴 프리셋 · 더미가공 확인 — ${ad.tool.name}`);
   }

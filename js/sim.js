@@ -1095,7 +1095,7 @@ export class Simulation {
     let inC = null;
     // AMR 운반: 앞서 나간 AMR이 셀 중앙에서 충분히(AMR 간격 이상) 빠져나간 뒤에 다음 AMR을 받는다
     const cleared = !this.useAMR || Object.values(st.outs).every((c) => !c.items.length || c.items[c.items.length - 1].s >= c.spacing + 0.4);
-    const cycleStop = st.cmd?.hold === 'cycle';   // 사이클 정지: 하던 작업만 마치고 새 작업은 받지 않는다
+    const cycleStop = st.cmd?.hold === 'cycle' || !!this.adaptive?.holdForTool(st);   // 사이클 정지: 하던 작업만 마치고 새 작업은 받지 않는다 (공구 수명 소진·교체 대기도 같음)
     if (!st.item && cleared && !cycleStop) for (const c of st.ins) if (this.frontReady(c) && (!inC || c.items[0].item.id < inC.items[0].item.id)) inC = c;
     if (inC) {
       const e = inC.items.shift();
@@ -1116,7 +1116,7 @@ export class Simulation {
         if (st.ad) this.adaptive.tick(st, dt);
         if (st.state !== 'BUSY') return;   // 채터 자율복구 실패·공구 파손으로 셀이 멈춤
         if (this.rand() < this.hazard(st) * dt) { this.fail(st); return; }
-        if (st.progress >= 1) { st.progress = 1; st.done = true; this.completeCycle(st); }
+        if (st.progress >= 1) { st.progress = 1; st.done = true; this.completeCycle(st); if (st.state === 'DOWN') return; }   // 완료 순간 공구 파손 → 고장 (배출하지 않고 멈춤)
       }
       if (st.done && st.item) {
         const out = this.outFor(st, st.item);

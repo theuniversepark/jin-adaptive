@@ -255,7 +255,7 @@ function renderZoneCard() {
         <div class="zc-line p-rcover"><small>▶ 리어커버 라인 · ${escH(ZONE_PRODUCTS.rcover.customer)}</small>${cellRow('RC_MILL')}${cellRow('RC_TURN')}</div></div>
         ${cellRow('CMM')}</div>
       <div class="zc-amr" id="zcAmr"></div>
-      <div class="zc-flow">투입 → 1.소재 식별·3D측정 → <span class="t-dt">유압블록 2.5축 가공 → 3.사선·디버링</span> / <span class="t-ea">리어커버 4.정밀절삭 → 5.선삭</span> → 6.CMM 판정 (NG → 리워크) → 합격품 적재</div>
+      <div class="zc-flow">투입 → ①소재 식별·3D측정 → <span class="t-dt">유압블록 ②5축 가공 → ③사선·디버링</span> / <span class="t-ea">리어커버 ④정밀절삭 → ⑤선삭</span> → ⑥CMM 판정 (NG → 리워크) → 합격품 적재</div>
       <div class="zc-ad" id="zcAd"></div>`;
   } else body = `<div class="zc-sub">${escH(currentLine.name)} · 공정 ${currentLine.stations.length}개 (공정 설계에서 편집)</div>`;
   zoneCard.innerHTML = `<div class="zc-h"><b>${ZONE_NAME}</b><small>메타팩토리 테스트베드 A-2 · 대승정밀 · 6셀 혼류</small></div>
