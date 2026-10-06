@@ -19,6 +19,17 @@ npm test               # 시뮬레이션 테스트 26종 (적응가공 폐루프
 - API 키 없이도 추론 기반 에이전트로 운영됨. Claude 연동은 `.env`의 `ANTHROPIC_API_KEY` 또는 앱 ⚙ 설정
 - 화면 확인용 스크린샷: `npx electron tools/shot.cjs <폴더> dark 600 zone,mill,cmm`
 
+## 맥 앱 (Jin-Adaptive.app)
+
+```bash
+npm run package     # → dist/Jin-Adaptive-darwin-arm64/Jin-Adaptive.app (Apple Silicon)
+```
+- `Jin-Adaptive.app`을 응용 프로그램 폴더로 옮겨 쓰면 됨. 앱 안에 서버·Three.js·Blender 모델이 모두 들어 있어 따로 설치할 것이 없음
+- 번들 ID `kr.or.camtic.jinadaptive` — Jin-3D(정밀조립) 앱과 설정·Claude API 키 저장 위치가 분리됨 (`~/Library/Application Support/Jin-Adaptive/`)
+- Claude API 키는 ⚙ 버튼 또는 ⌘, 에서 입력 (macOS 키체인 암호화)
+- ad-hoc 서명 앱임. 다른 Mac으로 옮기면 처음 한 번은 Finder에서 우클릭 → 열기 필요
+- 아이콘 원본: `build/src/icon.svg` → `npx electron build/src/render-icon.cjs` 로 `build/icon.png`·`icon.icns` 생성
+
 ## 적응가공 존 구성
 
 ```

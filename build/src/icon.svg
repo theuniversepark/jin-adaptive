@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="bg" cx="40%" cy="25%" r="85%"><stop offset="0" stop-color="#1b3a5c"/><stop offset="1" stop-color="#0a0f18"/></radialGradient>
+    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e9eef3"/><stop offset="1" stop-color="#aab6c2"/></linearGradient>
+    <linearGradient id="left" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f8bf0"/><stop offset="1" stop-color="#1747a8"/></linearGradient>
+    <linearGradient id="right" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0a030"/><stop offset="1" stop-color="#b8661c"/></linearGradient>
+    <linearGradient id="mill" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8b97a3"/><stop offset=".5" stop-color="#f4f7fa"/><stop offset="1" stop-color="#8b97a3"/></linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="180" fill="url(#bg)" stroke="#2b3b4f" stroke-width="3"/>
+  <!-- 폐루프 화살표 (가공 → 측정 → 보정) -->
+  <g fill="none" stroke="#37e8ff" stroke-width="22" stroke-linecap="round" opacity=".9">
+    <path d="M 262 600 A 270 200 0 0 1 300 330"/>
+    <path d="M 762 360 A 270 200 0 0 1 724 630"/>
+  </g>
+  <path d="M 300 300 l 32 62 l -68 -6 z" fill="#37e8ff"/>
+  <path d="M 724 660 l -32 -62 l 68 6 z" fill="#37e8ff"/>
+  <!-- 가공 블록 (등각) -->
+  <g transform="translate(512 560)">
+    <path d="M0 -150 L 190 -60 L 0 30 L -190 -60 Z" fill="url(#top)"/>
+    <path d="M -190 -60 L 0 30 L 0 200 L -190 110 Z" fill="url(#left)"/>
+    <path d="M 190 -60 L 0 30 L 0 200 L 190 110 Z" fill="url(#right)"/>
+    <g stroke="#ffffff" stroke-opacity=".35" stroke-width="5" fill="none">
+      <path d="M0 -150 L 190 -60 L 0 30 L -190 -60 Z"/><path d="M -190 -60 L 0 30 L 0 200 L -190 110 Z"/><path d="M 190 -60 L 0 30 L 0 200 L 190 110 Z"/>
+    </g>
+    <!-- 가공 홀 -->
+    <ellipse cx="-70" cy="-62" rx="30" ry="15" fill="#1d242c"/><ellipse cx="62" cy="-48" rx="22" ry="11" fill="#1d242c"/><ellipse cx="0" cy="-100" rx="16" ry="8" fill="#1d242c"/>
+    <ellipse cx="-95" cy="70" rx="14" ry="20" fill="#0d1c40" opacity=".8"/><ellipse cx="95" cy="70" rx="14" ry="20" fill="#5a2c08" opacity=".7"/>
+  </g>
+  <!-- 엔드밀 (스핀들) -->
+  <rect x="482" y="190" width="60" height="80" rx="8" fill="#2d3238" stroke="#5c6670" stroke-width="3"/>
+  <rect x="496" y="268" width="32" height="150" fill="url(#mill)"/>
+  <g stroke="#56616c" stroke-width="5"><line x1="496" y1="300" x2="528" y2="322"/><line x1="496" y1="336" x2="528" y2="358"/><line x1="496" y1="372" x2="528" y2="394"/></g>
+  <path d="M 496 418 L 528 418 L 512 436 Z" fill="#c6ced6"/>
+  <circle cx="512" cy="448" r="9" fill="#ffffff"/>
+  <text x="512" y="862" text-anchor="middle" font-family="Helvetica Neue, Arial, sans-serif" font-weight="800" font-size="86" fill="#e8eef4" letter-spacing="1">JIN-ADAPTIVE</text>
+</svg>
