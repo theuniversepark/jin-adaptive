@@ -7,7 +7,8 @@ let pass = 0, fail = 0;
 const check = (name, ok, info = '') => { ok ? pass++ : fail++; console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${name}${info ? '  — ' + info : ''}`); };
 const runMode = (mode, sec, seed = 4) => {
   const s = new Simulation(mode, seed, { line: zoneLine(), quiet: true }), ag = new FactoryAgent(s);
-  for (let t = 0; t < sec; t += 0.1) { s.step(0.1); ag.update(0.1); }
+  const cmm = s.processing.find((x) => x.id === 'CMM');
+  for (let t = 0; t < sec; t += 0.1) { s.step(0.1); ag.update(0.1); if (/합격|리워크|폐기/.test(cmm?.gate?.text ?? '')) s.gateVerdict = cmm.gate.text; }   // 표시판 판정 문구 (끝나는 순간은 측정 중일 수 있어 실행 중에 본다)
   return s;
 };
 
@@ -34,7 +35,7 @@ console.log('== 측정 · 판정 · 리워크 · 환류');
   check(`CMM 판정: 공차 ±${TOL_UM}µm 안이면 합격, 잔량은 리워크 후 재측정`, M.every((m) => m.res !== 'ok' || Math.abs(m.dev) <= TOL_UM * 1.5) && A.stats.rework > 0 && M.some((m) => m.reworked && m.res === 'ok'), `측정 ${A.stats.measured} · 리워크 ${A.stats.rework} · 폐기 ${A.stats.scrap}`); }
 { const errs = st(R.dark).cells.map((c) => Math.abs(c.err)); check('오프셋 환류: 가공셀 계통 편차가 공차의 절반 안에 머문다', errs.every((e) => e < TOL_UM / 2), errs.map((e) => e.toFixed(1)).join(' · ') + 'µm'); }
 check('레거시: 샘플 검사라 편차 소재가 유출 · 피지컬AI는 유출 0', R.traditional.stats.escaped > 0 && R.dark.stats.escaped === 0, `유출 ${R.traditional.stats.escaped} → ${R.dark.stats.escaped}`);
-{ const c = R.dark.processing.find((x) => x.id === 'CMM'); check('CMM 게이트 표시판에 판정 결과', /합격|리워크|폐기/.test(c.gate?.text ?? ''), c.gate?.text); }
+check('CMM 게이트 표시판에 판정 결과', !!R.dark.gateVerdict, R.dark.gateVerdict);
 { const m = R.dark.processing.find((x) => x.id === 'MATL'); check('소재 식별 게이트: 제품 라인 분기 · 가공여유 3D 스캔', /라인 · 가공여유 3D 스캔/.test(m.gateLog?.at(-1)?.text ?? ''), m.gateLog?.at(-1)?.text); }
 
 console.log('== 단계별 성과 (2시간)');

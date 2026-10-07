@@ -12,9 +12,9 @@ for (const [mode, label] of [['traditional', '레거시'], ['smart', '자동화'
   for (const seed of [2, 5]) {
     const s = new Simulation(mode, seed, { line: zoneLine(), quiet: true }), ag = new FactoryAgent(s), st = new Map();
     const docks = s.movers.filter((m) => m.kind === 'humanoid' && m.home?.heading != null);
-    // 충전 도크(바닥 판 ±0.475 · 뒤 기둥 −0.34~−0.52)와 겹침 — 도크 주인은 자기 도크 기둥만 검사
+    // 충전 도크(바닥 판 x ±0.475 · z −0.625~+0.475 · 뒤 기둥 −0.47~−0.65)와 겹침 — 도크 주인은 자기 도크 기둥만 검사
     const onDock = (m, d) => { const H = d.home, c = Math.cos(H.heading), sn = Math.sin(H.heading), rx = m.x - H.x, rz = m.z - H.z, lx = rx * c - rz * sn, lz = rx * sn + rz * c, r = moverRadius(m) * 0.7;
-      if (Math.abs(lx) < 0.25 + r && lz < -0.34 + r && lz > -0.52 - r) return true; return m !== d && Math.abs(lx) < 0.475 + r && lz < 0.475 + r && lz > -0.52 - r; };
+      if (Math.abs(lx) < 0.25 + r && lz < -0.47 + r && lz > -0.65 - r) return true; return m !== d && Math.abs(lx) < 0.475 + r && lz < 0.475 + r && lz > -0.65 - r; };
     let nextEv = 300;
     for (let t = 0; t < 2 * 3600; t += 0.1) {
       s.step(0.1); ag.update(0.1);

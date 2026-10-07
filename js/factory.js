@@ -553,16 +553,17 @@ function makeToolKits(g, ud) {
 // 휴머노이드 충전 도크: 대기 자리에 등을 대고 서면 등 배터리 팩 높이의 접점 암으로 충전 (로컬 +z = 로봇이 보는 쪽)
 function makeHumanoidDock() {
   const g = new THREE.Group();
-  put(box(0.95, 0.06, 0.95, std(0x2c3138, { roughness: 0.6 })), 0, 0.03, 0, g);
+  put(box(0.95, 0.06, 1.1, std(0x2c3138, { roughness: 0.6 })), 0, 0.03, -0.075, g);   // 바닥 판 (뒤쪽은 충전 기둥 밑까지)
   put(box(0.95, 0.065, 0.08, MAT.yellow), 0, 0.033, 0.44, g);
   for (const x of [-0.12, 0.12]) put(box(0.1, 0.012, 0.16, std(0xc8743a, { metalness: 0.8, roughness: 0.3 })), x, 0.066, 0.02, g);   // 발 접점
-  put(box(0.5, 1.75, 0.18, std(0xdfe3e8, { roughness: 0.45 })), 0, 0.875, -0.43, g);       // 충전 기둥
-  put(box(0.54, 0.06, 0.22, std(0x2c3138)), 0, 1.78, -0.43, g);
-  put(box(0.3, 0.12, 0.16, std(0x2c3138)), 0, 1.33, -0.3, g);                               // 접점 암 (등 배터리 팩 높이)
+  // 충전 기둥은 발 뒤로 넉넉히(−0.47~−0.65) — 도크를 떠나며 걸음을 뗄 때 뒷발이 기둥에 닿지 않게. 접점 암을 길게 해 등 배터리 팩에 닿는다
+  put(box(0.5, 1.75, 0.18, std(0xdfe3e8, { roughness: 0.45 })), 0, 0.875, -0.56, g);       // 충전 기둥
+  put(box(0.54, 0.06, 0.22, std(0x2c3138)), 0, 1.78, -0.56, g);
+  put(box(0.3, 0.12, 0.25, std(0x2c3138)), 0, 1.33, -0.345, g);                             // 접점 암 (등 배터리 팩 높이)
   put(box(0.24, 0.1, 0.02, std(0xc8743a, { metalness: 0.8, roughness: 0.3 })), 0, 1.33, -0.215, g);
   const led = emis(0x2aa8ff, 1.2);
-  for (const x of [-0.2, 0.2]) put(box(0.04, 1.2, 0.02, led, false), x, 0.95, -0.333, g);
-  const scr = emis(0x2aa8ff, 0.8); put(box(0.22, 0.12, 0.012, scr, false), 0, 1.6, -0.334, g);
+  for (const x of [-0.2, 0.2]) put(box(0.04, 1.2, 0.02, led, false), x, 0.95, -0.463, g);
+  const scr = emis(0x2aa8ff, 0.8); put(box(0.22, 0.12, 0.012, scr, false), 0, 1.6, -0.464, g);
   g.userData = { led, scr };
   return g;
 }
@@ -1040,7 +1041,7 @@ function placeRobots(g, st) {
 // ── 적응가공 셀 ─────────────────
 // 머신텐딩 셀(5축 가공·선삭): 셀 로컬 −z(Zone 안쪽)에 가공기, 6축 로봇이 AMR(셀 중앙) ↔ 가공기 안 지그로 소재를 옮긴다
 const TEND_TYPES = new Set(['mill5', 'turn']);
-export const TEND = { robot: { x: -1.25, z: -1.3 }, mc: { z: -3.25 }, table: { x: -0.1, y: 1.05, z: -3.05 }, door: { z: -2.2 } };
+export const TEND = { robot: { x: -0.8, z: -1.3 }, mc: { z: -3.25 }, table: { x: -0.1, y: 1.05, z: -3.05 }, door: { z: -2.2 } };
 // 가공 사이클 안의 로봇 구간: 로딩(집기 → 문 → 지그 안착) · 가공(문 닫힘) · 언로딩 (sim 진행률 p 기준)
 export const TEND_PH = { pick: 0.05, lift: 0.1, door: 0.17, load: 0.23, out: 0.29, cut0: 0.32, cut1: 0.8, reach: 0.84, grab: 0.88, back: 0.94, place: 0.98 };
 function mcEnclosure(g, w, d, h, z, col) {
@@ -1118,8 +1119,9 @@ function buildTurn(g, st) {
 }
 // 사선가공·디버링셀: AMR 위 소재를 그 자리에서 — 문형 사선 드릴 헤드(기울어진 스핀들) + 양쪽 협동로봇 디버링 + 출구 고압 세척·에어 블로 터널
 function buildDeburr(g, st) {
-  for (const z of [-1.15, 1.15]) put(box(0.14, 2.7, 0.14, MAT.steel), -0.35, 1.45, z, g);
-  put(box(0.22, 0.22, 2.5, MAT.steel), -0.35, 2.8, 0, g);
+  // 문형 기둥은 협동로봇 팔이 AMR 위 소재로 뻗는 길(z ±1.25 부근) 바깥에 세운다
+  for (const z of [-1.5, 1.5]) put(box(0.14, 2.7, 0.14, MAT.steel), -0.35, 1.45, z, g);
+  put(box(0.22, 0.22, 3.14, MAT.steel), -0.35, 2.8, 0, g);
   const head = put(new THREE.Group(), -0.35, 2.3, 0, g);
   put(box(0.3, 0.35, 0.3, MAT.accent), 0, 0.15, 0, head);
   put(box(0.08, 1.2, 0.08, MAT.steel), 0, 0.85, 0, head);
@@ -1170,7 +1172,8 @@ function buildMatId(g, st, sim) {
 function buildCMM(g, st, sim) {
   const gate = buildGate(g, -1.75, 0x58c4ff);
   const granite = std(0x3b3f45, { roughness: 0.35, metalness: 0.1 });
-  for (const z of [-1.25, 1.25]) put(box(1.6, 0.25, 0.3, granite), 0.15, 0.125, z, g);   // 그라나이트 레일
+  // 그라나이트 레일: 브리지 주행 범위(x −0.2~0.5 ± 기둥)만큼 — 통로 쪽(−x) 끝은 셀 옆에 도킹한 AMMR 플랫폼에 닿지 않게
+  for (const z of [-1.25, 1.25]) put(box(1.25, 0.25, 0.3, granite), 0.325, 0.125, z, g);
   const bridge = put(new THREE.Group(), 0.15, 0, 0, g);                      // 문형 브리지 (X 이동)
   for (const z of [-1.2, 1.2]) put(box(0.18, 2.3, 0.22, MAT.white), 0, 1.4, z, bridge);
   put(box(0.24, 0.26, 2.6, MAT.white), 0, 2.55, 0, bridge);
@@ -1646,7 +1649,9 @@ export class FactoryView {
     const doorW = 4.6, spans = [[19, YARD.bays[0] - doorW / 2], [YARD.bays[0] + doorW / 2, YARD.bays[1] - doorW / 2], [YARD.bays[1] + doorW / 2, 38]];
     for (const [a, b] of spans) put(box(b - a, 8, 0.3, MAT.wall), (a + b) / 2, 4, -20, r);
     for (const bx of YARD.bays) put(box(doorW, 8 - 4.9, 0.3, MAT.wall), bx, 4.9 + (8 - 4.9) / 2, -20, r);
-    put(box(19, 0.3, 0.32, MAT.steel), 28.5, 0.15, -20, r);
+    // 강철 걸레받이는 벽 구간만, 출하 도크 문은 지게차가 넘는 바닥 높이 강판
+    for (const [a, b] of spans) put(box(b - a, 0.3, 0.32, MAT.steel), (a + b) / 2, 0.15, -20, r);
+    for (const bx of YARD.bays) put(box(doorW, 0.03, 0.32, MAT.steel), bx, 0.015, -20, r);
     // 왼쪽 벽(확장동 x −51): 입고 도크 문(z −16.8~−12.2, 높이 4.9m)만 트럭 하차용으로 열고 나머지는 외벽
     // 왼쪽 벽은 그림자를 드리우지 않는다 (해가 왼쪽에서 비쳐 물류 확장동 바닥을 크게 덮던 그림자 제거 — 바닥은 다른 그림자를 그대로 받음)
     { const dz0 = INBOUND.dockZ - 2.3, dz1 = INBOUND.dockZ + 2.3;
@@ -1654,7 +1659,7 @@ export class FactoryView {
       put(box(0.3, 8, dz0 + 20, MAT.wall), W, 4, (-20 + dz0) / 2, lw);
       put(box(0.3, 8, 20 - dz1, MAT.wall), W, 4, (dz1 + 20) / 2, lw);
       put(box(0.3, 8 - 4.9, 4.6, MAT.wall), W, 4.9 + (8 - 4.9) / 2, INBOUND.dockZ, lw);
-      put(box(0.32, 0.3, 4.6, MAT.steel), W, 0.15, INBOUND.dockZ, lw);   // 강철 문턱은 도크 문 폭만 (나머지는 외벽 색 그대로)
+      put(box(0.32, 0.03, 4.6, MAT.steel), W, 0.015, INBOUND.dockZ, lw);   // 강철 문턱은 도크 문 폭만, 지게차가 넘도록 바닥 높이 (나머지는 외벽 색 그대로)
       // 입고 도크: 말아 올린 셔터·문틀·도크 레벨러·범퍼·표지
       put(cyl(0.32, 0.32, 4.6, MAT.dark, 16), W + 0.15, 4.75, INBOUND.dockZ, lw).rotation.x = Math.PI / 2;
       put(box(0.14, 0.25, 4.8, MAT.yellow), W + 0.25, 4.6, INBOUND.dockZ, lw);
@@ -2199,7 +2204,8 @@ export class FactoryView {
       if (parts.arms) Object.values(parts.arms).forEach((A, i) => { const uid = sim.sinkRobotUids?.[i]; if (!uid) return; const sp = idPlate(uid); sp.position.set(0, 3.3, 0); A.arm.root.add(sp); this.idPlates.push(sp); sp.visible = labelsOn; });
       const vlaCell = st.vla && parts.robots?.some((r) => r.vla);
       if (vlaCell) for (const f of parts.feeders ?? []) f.visible = false;   // 로봇별 부품 선반으로 대체
-      const light = vlaCell ? put(makeStackLight(), 0.1, 0.15, -2.1, g) : put(makeStackLight(), -1.9, 0.15, -1.6, g);
+      // 구분 적재장: 두 팔레타이저 팔이 도는 범위 밖 — AMR 통로와 유압블록 적재 칸 사이 입구 쪽 모서리에 경광등
+      const light = vlaCell ? put(makeStackLight(), 0.1, 0.15, -2.1, g) : st.type === 'sink' && sim.zone ? put(makeStackLight(), -1.6, 0.15, 1.3, g) : put(makeStackLight(), -1.9, 0.15, -1.6, g);
       g.traverse((o) => { o.userData.stationId = st.id; });
       g.userData.stationId = st.id;
       const autoVisible = mode !== 'traditional';
@@ -2646,7 +2652,11 @@ export class FactoryView {
       vv.yaw = lerpAngle(vv.yaw, v.heading, Math.min(1, rdt * 8));
       vv.g.rotation.y = vv.yaw;
       const { load, crates, led, fork } = vv.g.userData;
-      load.visible = !!v.load;
+      // 포크가 구분 적재장 팔레트 밑에 들어가 있는 동안(포크 끝~뿌리 1.2m): 들어 올리지 않고, 실은 짐도 빼낸 뒤에 보인다 (남은 적재품 속으로 겹치지 않게)
+      const tipX = v.x + Math.sin(v.heading) * 1.9, tipZ = v.z + Math.cos(v.heading) * 1.9, baseX = v.x + Math.sin(v.heading) * 0.7, baseZ = v.z + Math.cos(v.heading) * 0.7;
+      const under = (x, z) => sim.stations.some((s2) => s2.type === 'sink' && Math.abs(x - s2.x) < 1.6 && Math.abs(Math.abs(z - (s2.z ?? 0)) - 3.0) < 1.3);
+      const inPallet = under(tipX, tipZ) || under(baseX, baseZ);
+      load.visible = !!v.load && !inPallet;
       if (fork) {   // 지게차 포크 높이: 도크에 선 트럭 뒤쪽에 포크 끝이 다가가면 적재함 바닥(1.27m) 위까지 올려 싣고 내린다 · 그 밖에는 주행 높이
         const fx = v.x + Math.sin(v.heading) * 1.9, fz = v.z + Math.cos(v.heading) * 1.9;
         let near = 99;
@@ -2655,7 +2665,7 @@ export class FactoryView {
           const rx = tk.x - Math.sin(tk.heading ?? 0) * YARD.truckLen / 2, rz = tk.z - Math.cos(tk.heading ?? 0) * YARD.truckLen / 2;
           near = Math.min(near, Math.hypot(fx - rx, fz - rz));
         }
-        const want = near < 3.4 ? TRUCK_BED_LIFT * Math.min(1, (3.4 - near) / 1.2) : v.load ? 0.12 : 0;
+        const want = near < 3.4 ? TRUCK_BED_LIFT * Math.min(1, (3.4 - near) / 1.2) : v.load && !inPallet ? 0.12 : 0;
         fork.position.y += (want - fork.position.y) * Math.min(1, rdt * 5);
       }
       if (v.load) {
@@ -2728,7 +2738,8 @@ export class FactoryView {
     const st = v.station, ud = g.userData;
     // 서서 일할 때 바라볼 곳: 대응 중인 현장 이벤트 → 일하는 셀(정비·부품 보충) — Atlas 휴머노이드는 발은 두고 허리(360°)·머리(±90°)를 돌린다
     let look = null;
-    if (!moved && v.kind === 'humanoid' && v.task) {
+    const docked = v.home?.heading != null && Math.hypot(v.x - v.home.x, v.z - v.home.z) < 0.4;   // 충전 도크 안: 허리를 돌리면 부품 빈이 등 뒤 충전 기둥을 쓴다
+    if (!moved && v.kind === 'humanoid' && v.task && !docked) {
       const ev = (this.sim.fieldEvents ?? []).find((e) => !e.cleared && v.job?.ev === e);
       const near = ev ?? v.job?.st ?? this.sim.processing.reduce((b, s2) => (Math.hypot(s2.x - v.x, (s2.z ?? 0) - v.z) < Math.hypot(b.x - v.x, (b.z ?? 0) - v.z) ? s2 : b), this.sim.processing[0]);
       if (near && Math.hypot(near.x - v.x, (near.z ?? 0) - v.z) < 4.5) look = Math.atan2(near.x - v.x, (near.z ?? 0) - v.z);
@@ -2750,8 +2761,10 @@ export class FactoryView {
     if (ud.body) {
       if (moved) {
         ud.body.position.y = Math.abs(Math.sin(t * 9)) * 0.06;
-        ud.armL.rotation.x = Math.sin(t * 9) * 0.6; ud.armR.rotation.x = -Math.sin(t * 9) * 0.6;
-        if (ud.legL) { ud.legL.rotation.x = -Math.sin(t * 9) * 0.5; ud.legR.rotation.x = Math.sin(t * 9) * 0.5; }
+        // 충전 도크 안(대기 자리 0.6m 이내)에서는 보폭·팔 흔들림을 줄인다 — 뒷발·팔이 등 뒤 충전 기둥에 닿지 않게
+        const dk = v.home?.heading != null ? Math.min(1, 0.25 + Math.hypot(v.x - v.home.x, v.z - v.home.z) / 0.8) : 1;
+        ud.armL.rotation.x = Math.sin(t * 9) * 0.6 * dk; ud.armR.rotation.x = -Math.sin(t * 9) * 0.6 * dk;
+        if (ud.legL) { ud.legL.rotation.x = -Math.sin(t * 9) * 0.5 * dk; ud.legR.rotation.x = Math.sin(t * 9) * 0.5 * dk; }
       } else {
         ud.body.position.y = 0;
         const working = (st && st.state === 'BUSY') || (isTech && v.task && !moved);
@@ -2965,7 +2978,10 @@ export class FactoryView {
         if (st.type === 'mill5') {
           if (cutting) parts.spindle.rotation.y += dts * 50;
           parts.head.position.y += ((cutting ? 1.85 + Math.sin(t * 3) * 0.05 : 2.05) - parts.head.position.y) * Math.min(1, rdt * 5);
-          parts.head.position.x = TEND.table.x + (cutting ? Math.sin(p * Math.PI * 9) * 0.2 : 0);
+          // 로딩·언로딩(문 열림) 구간: 그리퍼가 지그 위로 내려오므로 스핀들 헤드를 +x로 비켜 둔다 (진행률 기준이라 배속과 무관)
+          const ramp = (a, b) => Math.min(1, Math.max(0, (p - a) / (b - a)));
+          const aside = !st.item || st.item.scrap ? 0 : p < P.cut0 ? ramp(P.pick, P.pick + 0.04) * (1 - ramp(P.cut0 - 0.02, P.cut0)) : p > P.cut1 ? ramp(P.cut1, P.cut1 + 0.03) * (1 - ramp(P.back + 0.01, P.back + 0.04)) : 0;
+          parts.head.position.x = TEND.table.x + (cutting ? Math.sin(p * Math.PI * 9) * 0.2 : 0) + aside * 0.7;
           parts.cradle.rotation.x = cutting ? Math.sin(p * Math.PI * 4) * 0.35 : parts.cradle.rotation.x * 0.9;   // A축 기울기 (5축 동시)
           parts.table.rotation.y += cutting ? dts * 0.8 : 0;
           if (chat && cutting) parts.head.position.z = parts.tz + Math.sin(t * 90) * 0.012; else parts.head.position.z = parts.tz;   // 채터 떨림
@@ -3003,7 +3019,7 @@ export class FactoryView {
         if (st.type === 'cmm') {
           // 문형 CMM: 측정 구간에 브리지가 X로 오가고 퀼이 내려와 프로브로 접촉 측정 · 리워크 중이면 리워크 스핀들
           const meas = busy && p > 0.3 && p < 0.9 && !st.item?.scrap;
-          parts.bridge.position.x = 0.15 + (meas ? Math.sin(p * Math.PI * 6) * 0.45 : 0);
+          parts.bridge.position.x = 0.15 + (meas ? Math.sin(p * Math.PI * 6) * 0.35 : 0);   // 주행 ±0.35 — 브리지 기둥이 옆 AMMR 팔 작업 범위에 들어가지 않게
           parts.car.position.z = meas ? Math.cos(p * Math.PI * 7) * 0.3 : 0;
           const tq = meas ? -(2.55 - (BELT_Y + 0.25 + (st.item?.product ? PRODUCT_H[st.item.product] : 0.15)) - 1.12) * (0.6 + 0.4 * Math.abs(Math.sin(p * Math.PI * 14))) : 0;
           parts.quill.position.y += (tq - parts.quill.position.y) * Math.min(1, rdt * 8);
@@ -3108,7 +3124,7 @@ export class FactoryView {
     const ik = (x, y, z) => { const dx = x - r.slot.x, dz = z - r.slot.z; return armIK(s, dx * c - dz * sn, y - 0.15, dx * sn + dz * c); };
     const H = st.item?.product ? PRODUCT_H[st.item.product] : 0.15, top = BELT_Y + 0.05 + H;
     const K = r.tendKeys?.[H] ?? ((r.tendKeys ??= {})[H] = {
-      home: ik(-0.6, 1.75, -0.9), amrUp: ik(0, top + 0.45, 0), amr: ik(0, top + 0.02, 0),
+      home: ik(TEND.robot.x + 0.65, 1.75, -0.9), amrUp: ik(0, top + 0.45, 0), amr: ik(0, top + 0.02, 0),
       door: ik(TEND.table.x, 1.65, TEND.door.z + 0.1), mcUp: ik(TEND.table.x, TEND.table.y + H + 0.35, TEND.table.z), mc: ik(TEND.table.x, TEND.table.y + H + 0.02, TEND.table.z),
     });
     let q = K.home;
@@ -3267,7 +3283,7 @@ export class FactoryView {
       }
     }
     // 물류 대기: 출하 지게차 — 두 출하 도크(트럭) 사이 벽 앞
-    { const fx = YARD.waitX, fz = YARD.wallZ + 2.4; area(fx - 1.3, fz - 2.1, fx + 1.3, fz + 1.3, GREEN, '출하 대기', sim.mode.key === 'dark' ? '자율 지게차' : '출하 지게차 (유인)', fx, fz + 1.95, 3.2); }
+    { const fx = YARD.waitX, fz = YARD.waitZ; area(fx - 1.3, fz - 2.1, fx + 1.3, fz + 1.3, GREEN, '출하 대기', sim.mode.key === 'dark' ? '자율 지게차' : '출하 지게차 (유인)', fx, fz + 1.95, 3.2); }
   }
 
   // 화물트럭: 시뮬레이션 트럭 목록과 모델을 맞추고, 위치·방향·뒷문·적재 팔레트·라벨을 갱신한다
