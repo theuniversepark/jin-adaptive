@@ -19,6 +19,7 @@ npm install            # 처음 한 번
 npm start              # http://localhost:8765  (PORT=8766 npm start 로 포트 변경)
 npm run app            # 맥 앱 창으로 실행 (Electron)
 npm test               # 시뮬레이션 테스트 26종 (적응가공 폐루프: tests/adaptive.mjs)
+npx electron tools/collide.cjs   # 로봇·설비·이동체 간섭 검사 (3단계 × 1시간, 1.5cm 넘게 겹치면 목록 출력·종료 코드 1)
 ```
 
 - API 키 없이도 추론 기반 에이전트로 운영됨. Claude 연동은 `.env`의 `ANTHROPIC_API_KEY` 또는 앱 ⚙ 설정
