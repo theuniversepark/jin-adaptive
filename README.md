@@ -5,6 +5,9 @@
 
 **▶ 웹 버전 바로 실행: https://theuniversepark.github.io/jin-adaptive/** (설치 없이 브라우저에서 실행 · Claude 연동과 MQTT 발행은 맥 앱 또는 `npm start`에서)
 
+**⬇ 맥 앱 다운로드 (Apple Silicon): [Jin-Adaptive-mac-arm64.zip](https://github.com/theuniversepark/jin-adaptive/releases/download/v1.0.0/Jin-Adaptive-mac-arm64.zip)** · [릴리스 노트](https://github.com/theuniversepark/jin-adaptive/releases/tag/v1.0.0)
+압축을 풀고 처음 한 번은 `Jin-Adaptive.app`을 **오른쪽 클릭 → 열기**로 실행 (Apple 공증 전 자체 서명 앱). 그래도 막히면 `xattr -dr com.apple.quarantine /Applications/Jin-Adaptive.app`
+
 - 설계 근거·셀 구성·폐루프 규칙·미확정 사항: [docs/ADAPTIVE_ZONE_DESIGN.md](docs/ADAPTIVE_ZONE_DESIGN.md)
 - 공통 플랫폼 기능(오케스트레이터 · CCTV · 5G · ERP · AAS · VLA · AIOS 등) 설명: [docs/PLATFORM.md](docs/PLATFORM.md)
 
